@@ -1,0 +1,212 @@
+body {
+  width: 300px;
+  padding: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.page {
+  display: none;
+}
+
+.page.active {
+  display: block;
+}
+
+.status-container {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.timer-display {
+  margin: 15px 0;
+}
+
+.current-session {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.date-display {
+  font-size: 16px;
+  color: #666;
+  margin: 5px 0;
+}
+
+.total-today {
+  font-size: 18px;
+  color: #666;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 20px 0;
+}
+
+/* 슬라이더 스타일 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #2196F3;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+/* 설정 페이지 스타일 */
+.settings-form {
+  margin: 20px 0;
+}
+
+.input-group {
+  margin-bottom: 15px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.links {
+  margin: 20px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* 작업 중이 아닐 때는 off-state 이미지만 표시 */
+.animation-container:not(.working) img.off-state {
+  display: block;
+}
+
+/* 작업 중일 때는 working-state 이미지들만 표시 */
+.animation-container.working img.working-state {
+  display: block;
+  animation: workingAnimation 1s infinite;
+}
+
+.animation-container.working img.off-state {
+  display: none;
+}
+
+@keyframes workingAnimation {
+  0%, 100% { opacity: 0; }
+  25% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* 작업 중이 아닐 때는 첫 번째 이미지만 표시 */
+.animation-container:not(.working) img:first-child {
+  opacity: 1;
+  filter: grayscale(100%);
+}
+
+.time-select-group {
+  display: flex;
+  gap: 8px;
+}
+
+.time-select-group select {
+  padding: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 20px;
+}
+
+.nav-header h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.settings-description {
+  color: #666;
+  line-height: 1.5;
+  margin: 16px 0;
+}
+
+.primary-button {
+  width: 100%;
+  padding: 12px;
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  margin: 24px 0;
+}
+
+.additional-links {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.additional-links h3 {
+  font-size: 16px;
+  color: #666;
+}
+
+.additional-links ul {
+  list-style: none;
+  padding: 0;
+}
+
+.additional-links li {
+  margin: 8px 0;
+}
+
+.additional-links a {
+  color: #2196F3;
+  text-decoration: none;
+} 

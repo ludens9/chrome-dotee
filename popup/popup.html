@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="main-page" class="page active">
+    <div class="nav-header">
+      <h1>근무시간 기록</h1>
+      <button id="settings-btn">설정</button>
+    </div>
+    <div class="status-container">
+      <div class="timer-display">
+        <div class="current-session">00:00:00</div>
+        <div class="date-display"></div>
+        <div class="total-today">0.0시간</div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <label class="switch">
+        <input type="checkbox" id="work-toggle">
+        <span class="slider"></span>
+      </label>
+      
+      <select id="auto-stop">
+        <option value="0">자동 종료 안함</option>
+        <option value="2">2시간 후 종료</option>
+        <option value="3">3시간 후 종료</option>
+        <option value="4">4시간 후 종료</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="settings-page" class="page">
+    <div class="nav-header">
+      <button id="back-btn">← 돌아가기</button>
+      <h1>설정</h1>
+    </div>
+    
+    <div class="settings-content">
+      <h2>리포트 설정</h2>
+      <p class="settings-description">
+        매일 전날의 근무기록 통계를 이메일로 전달해드립니다.<br>
+        평소 근무 시작 시간으로 설정하면 효율적으로 확인하실 수 있습니다.
+      </p>
+    
+    <div class="settings-form">
+      <div class="input-group">
+        <label>이메일</label>
+        <input type="email" id="email-input" placeholder="리포트를 받을 이메일 주소">
+      </div>
+      
+      <div class="input-group">
+        <label>리포트 발송 시간</label>
+        <div class="time-select-group">
+          <select id="period-select">
+            <option value="AM">오전</option>
+            <option value="PM">오후</option>
+          </select>
+          <select id="hour-select">
+            <option value="1">01</option>
+            <option value="2">02</option>
+            <option value="3">03</option>
+            <option value="4">04</option>
+            <option value="5">05</option>
+            <option value="6">06</option>
+            <option value="7">07</option>
+            <option value="8">08</option>
+            <option value="9">09</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+          </select>
+          <select id="minute-select">
+            <option value="0">00</option>
+            <option value="5">05</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="25">25</option>
+            <option value="30">30</option>
+            <option value="35">35</option>
+            <option value="40">40</option>
+            <option value="45">45</option>
+            <option value="50">50</option>
+            <option value="55">55</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button id="save-settings" class="primary-button">설정 저장</button>
+    
+    <div class="additional-links">
+      <h3>추가 기능</h3>
+      <ul>
+        <li><a href="#" id="download-app">앱 다운로드</a></li>
+        <li><a href="#" id="visit-website">웹사이트 방문</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="../js/timer.js"></script>
+  <script type="module" src="../js/storage.js"></script>
+  <script src="../js/email.js"></script>
+  <script src="../js/network.js"></script>
+  <script src="../js/queue.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html> 
