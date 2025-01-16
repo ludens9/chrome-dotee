@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Dotee Daily Report</title>
+</head>
+<body>
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
+    <!-- 헤더 섹션 -->
+    <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px;">
+      <div style="color: #666666; margin-bottom: 10px;">{{date}} {{weekday}}</div>
+      <h1 style="font-size: 24px; color: #1f2937; margin-bottom: 16px;">새로운 하루가 시작되었어요.</h1>
+      <p style="color: #374151;">{{to_email}}님, 출근 전 어제의 기록을 확인하세요.</p>
+    </div>
+
+    <!-- 통합 근무시간 정보 -->
+    <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px;">
+      <div style="margin-bottom: 8px;">첫 출근 {{start_time}}</div>
+      <div style="margin-bottom: 8px;">마지막 퇴근 {{end_time}}</div>
+      <div style="margin-bottom: 8px;">총 근무 {{total_hours}} 시간</div>
+      <div style="margin-bottom: 8px;">이번 주 누적 {{week_hours}} 시간</div>
+      <div style="margin-bottom: 8px;">저번 주 누적 {{last_week_hours}} 시간</div>
+      <div style="margin-bottom: 8px;">이번 달 누적 {{month_hours}} 시간</div>
+      <div style="margin-bottom: 8px;">저번 달 누적 {{last_month_hours}} 시간</div>
+      <div style="background-color: #f3f4f6; padding: 12px; border-radius: 4px; margin-top: 16px; font-size: 13px; color: #666666;">{{notice_message}}</div>
+    </div>
+
+    <!-- 메시지 섹션 -->
+    <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px;">
+      <p style="color: #374151; margin: 0;">{{message}}</p>
+    </div>
+
+    <!-- 근무 시작 버튼 -->
+    <div style="background-color: #2563eb; color: white; padding: 16px; text-align: center; border-radius: 8px; margin-bottom: 20px;">오늘 근무 시작하기</div>
+
+    <!-- 앱 다운로드 섹션 -->
+    <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+      <h2 style="font-size: 18px; margin-bottom: 10px;">PC에서 매번 체크하기 번거롭다면?</h2>
+      <p style="color: #4b5563; margin-bottom: 16px;">도티 앱으로 편리하게 근무를 시작하고<br>새로운 동료도 만나보세요</p>
+      <div style="background-color: #1f2937; color: white; padding: 8px 16px; display: inline-block; border-radius: 8px;">도티앱 다운로드</div>
+    </div>
+
+    <!-- 푸터 -->
+    <div style="text-align: center; color: #6b7280; font-size: 14px;">
+      <div style="margin-bottom: 8px;">&copy; 2024 Bold Inc.</div>
+      <div>본 메일은 자동으로 발송되었습니다.</div>
+    </div>
+  </div>
+</body>
+</html> 

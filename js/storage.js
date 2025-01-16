@@ -13,15 +13,61 @@ export class StorageManager {
 
   static async saveWorkRecord(record) {
     try {
-      const date = new Date().toISOString().split('T')[0];
+      const startDate = new Date(record.startTime);
+      const dateStr = startDate.toISOString().split('T')[0];
+      
       const { workRecords = {} } = await chrome.storage.local.get('workRecords');
       
-      if (!workRecords[date]) {
-        workRecords[date] = [];
+      console.log('근무 기록 저장:', {
+        기준날짜: dateStr,
+        시작시간: new Date(record.startTime).toLocaleString(),
+        종료시간: new Date(record.endTime).toLocaleString(),
+        근무시간: (record.duration / 3600).toFixed(1) + '시간'
+      });
+      
+      if (!workRecords[dateStr]) {
+        workRecords[dateStr] = [];
       }
       
-      workRecords[date].push(record);
+      const endDate = new Date(record.endTime);
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      if (dateStr !== endDateStr) {
+        const midnight = new Date(endDateStr);
+        midnight.setHours(0, 0, 0, 0);
+        
+        const firstDayDuration = Math.floor((midnight - startDate) / 1000);
+        workRecords[dateStr].push({
+          startTime: record.startTime,
+          endTime: midnight.toISOString(),
+          duration: firstDayDuration,
+          date: dateStr
+        });
+        
+        const secondDayDuration = Math.floor((endDate - midnight) / 1000);
+        if (!workRecords[endDateStr]) {
+          workRecords[endDateStr] = [];
+        }
+        workRecords[endDateStr].push({
+          startTime: midnight.toISOString(),
+          endTime: record.endTime,
+          duration: secondDayDuration,
+          date: endDateStr
+        });
+        
+        console.log('자정 넘김 처리:', {
+          첫째날: `${dateStr} (${firstDayDuration / 3600}시간)`,
+          둘째날: `${endDateStr} (${secondDayDuration / 3600}시간)`
+        });
+      } else {
+        workRecords[dateStr].push({
+          ...record,
+          date: dateStr
+        });
+      }
+      
       await chrome.storage.local.set({ workRecords });
+      console.log('저장 완료된 전체 기록:', workRecords);
     } catch (error) {
       console.error('Failed to save work record:', error);
     }
@@ -30,6 +76,7 @@ export class StorageManager {
   static async getWorkRecords() {
     try {
       const { workRecords } = await chrome.storage.local.get('workRecords');
+      console.log('불러온 전체 근무 기록:', workRecords);
       return workRecords || {};
     } catch (error) {
       console.error('Failed to get work records:', error);
@@ -37,30 +84,59 @@ export class StorageManager {
     }
   }
 
-  static async getWeeklyTotal() {
+  static async getWeeklyTotal(baseDate = new Date()) {
     const records = await this.getWorkRecords();
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
+    const weekStart = new Date(baseDate);
+    const day = weekStart.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;  // 일요일이면 -6, 아니면 1-day
+    weekStart.setDate(weekStart.getDate() + mondayOffset);  // 월요일로 설정
     weekStart.setHours(0, 0, 0, 0);
     
-    return Object.entries(records)
-      .filter(([date]) => new Date(date) >= weekStart)
-      .reduce((total, [, dayRecords]) => {
-        return total + dayRecords.reduce((dayTotal, record) => dayTotal + record.duration, 0);
-      }, 0);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const baseDateStr = baseDate.toISOString().split('T')[0];
+    
+    console.log('주간 범위:', {
+        시작일: weekStartStr,
+        종료일: baseDateStr
+    });
+    
+    let weekTotal = 0;
+    Object.entries(records)
+        .filter(([date]) => date >= weekStartStr && date <= baseDateStr)
+        .sort()  // 날짜순 정렬
+        .forEach(([date, dayRecords]) => {
+            const dayTotal = dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+            console.log(`${date} 근무:`, (dayTotal / 3600).toFixed(1) + '시간');
+            weekTotal += dayTotal;
+        });
+    
+    console.log('주간 누적:', (weekTotal / 3600).toFixed(1) + '시간');
+    return weekTotal;
   }
 
-  static async getMonthlyTotal() {
+  static async getMonthlyTotal(baseDate = new Date()) {
     const records = await this.getWorkRecords();
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
     
-    return Object.entries(records)
-      .filter(([date]) => new Date(date) >= monthStart)
-      .reduce((total, [, dayRecords]) => {
-        return total + dayRecords.reduce((dayTotal, record) => dayTotal + record.duration, 0);
-      }, 0);
+    const monthStartStr = monthStart.toISOString().split('T')[0];
+    const baseDateStr = baseDate.toISOString().split('T')[0];
+    
+    console.log('월간 범위:', {
+        시작일: monthStartStr,
+        종료일: baseDateStr
+    });
+    
+    let monthTotal = 0;
+    Object.entries(records)
+        .filter(([date]) => date >= monthStartStr && date <= baseDateStr)
+        .forEach(([date, dayRecords]) => {
+            const dayTotal = dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+            console.log(`${date} 누적:`, dayTotal / 3600, '시간');
+            monthTotal += dayTotal;
+        });
+    
+    return monthTotal;
   }
 
   static async saveWorkStatus(status) {
@@ -132,5 +208,17 @@ export class StorageManager {
     status.totalToday = 0;
     status.savedTotalToday = 0;
     await this.saveWorkStatus(status);
+  }
+
+  static async getLastWeekTotal(baseDate = new Date()) {
+    const lastWeekEnd = new Date(baseDate);
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);  // 일주일 전으로
+    return this.getWeeklyTotal(lastWeekEnd);
+  }
+
+  static async getLastMonthTotal(baseDate = new Date()) {
+    const lastMonthEnd = new Date(baseDate);
+    lastMonthEnd.setMonth(lastMonthEnd.getMonth() - 1);  // 한 달 전으로
+    return this.getMonthlyTotal(lastMonthEnd);
   }
 } 

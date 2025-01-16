@@ -194,20 +194,30 @@ class WorkManager {
     const sessionDuration = this.state.currentSession;
     const prevAutoStopHours = this.state.autoStopHours;
     
+    console.log('근무 종료 시점 상태:', {
+        세션시간: sessionDuration,
+        시작시간: this.state.startTime,
+        종료시간: new Date().toISOString()
+    });
+    
     this.state = {
-      ...DefaultState,
-      totalToday: this.state.totalToday,
-      autoStopHours: prevAutoStopHours
+        ...DefaultState,
+        totalToday: this.state.totalToday,
+        autoStopHours: prevAutoStopHours
     };
     
     this.stopTimer();
     this.iconAnimator.stopAnimation();
     await this.saveAndNotify();
-    await StorageManager.saveWorkRecord({
-      duration: sessionDuration,
-      startTime: this.state.startTime,
-      endTime: new Date().toISOString()
-    });
+
+    const record = {
+        duration: sessionDuration,
+        startTime: this.state.startTime,
+        endTime: new Date().toISOString()
+    };
+    console.log('저장되는 근무 기록:', record);
+    
+    await StorageManager.saveWorkRecord(record);
   }
 
   async saveAndNotify() {
@@ -340,8 +350,8 @@ class WorkManager {
 
   async handleMidnightReset() {
     console.log('자정 리셋 시작:', {
-      현재상태: this.state,
-      현재시간: new Date().toISOString()
+        현재상태: this.state,
+        현재시간: new Date().toISOString()
     });
 
     const previousDate = new Date();
@@ -350,31 +360,38 @@ class WorkManager {
 
     // 작업 중이었다면 이전 날짜 기록 저장
     if (this.state.isWorking) {
-      const sessionEndTime = new Date();
-      sessionEndTime.setHours(0, 0, 0, 0);  // 자정 시간으로 설정
-      
-      const currentSession = Math.floor((sessionEndTime - new Date(this.state.startTime)) / 1000);
-      
-      await StorageManager.saveWorkRecord({
-        date: dateStr,
-        duration: currentSession,
-        startTime: this.state.startTime,
-        endTime: sessionEndTime.toISOString()
-      });
-
-      // 새로운 세션 시작
-      this.state = {
-        ...this.state,
-        startTime: sessionEndTime.toISOString(),  // 자정부터 시작
-        currentSession: 0,
-        savedTotalToday: 0,
-        totalToday: 0
-      };
+        const midnight = new Date();
+        midnight.setHours(0, 0, 0, 0);
+        
+        const previousDaySession = Math.floor((midnight - new Date(this.state.startTime)) / 1000);
+        
+        const record = {
+            date: dateStr,
+            duration: previousDaySession,
+            startTime: this.state.startTime,
+            endTime: midnight.toISOString()
+        };
+        
+        console.log('자정 리셋 시 저장되는 기록:', record);
+        await StorageManager.saveWorkRecord(record);
     }
 
+    // 새로운 날짜의 세션 시작
+    const newStartTime = midnight.toISOString();
+    const currentTime = new Date();
+    const newSessionDuration = Math.floor((currentTime - midnight) / 1000);
+
+    this.state = {
+        ...this.state,
+        startTime: newStartTime,
+        currentSession: newSessionDuration,
+        savedTotalToday: newSessionDuration,  // 새로운 날의 누적 시간 시작
+        totalToday: newSessionDuration
+    };
+
     console.log('자정 리셋 완료:', {
-      저장된날짜: dateStr,
-      새로운상태: this.state
+        저장된날짜: dateStr,
+        새로운상태: this.state
     });
 
     await this.saveAndNotify();
@@ -382,76 +399,59 @@ class WorkManager {
 
   async sendDailyReport(emailService) {
     try {
-      const settings = await chrome.storage.local.get(['email', 'reportTime']);
-      if (!settings.email) return;
+        const settings = await chrome.storage.local.get(['email', 'reportTime']);
+        if (!settings.email) return;
 
-      // 어제 날짜 계산
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      
-      // 어제의 근무 기록 가져오기
-      const workRecords = await chrome.storage.local.get('workRecords');
-      const yesterdayRecords = workRecords.workRecords?.[yesterdayStr] || [];
+        // 어제 날짜 계산
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        // 어제의 근무 기록 가져오기
+        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+        const yesterdayRecords = workRecords[yesterdayStr] || [];
 
-      // 첫 출근, 마지막 퇴근 시간 계산
-      let startTime = '기록 없음';
-      let endTime = '기록 없음';
-      let totalSeconds = 0;
+        // 어제 근무 시간 계산
+        let startTime = '기록 없음';
+        let endTime = '기록 없음';
+        let totalSeconds = 0;
 
-      if (yesterdayRecords.length > 0) {
-        startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit'
+        if (yesterdayRecords.length > 0) {
+            startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
+        }
+
+        // 주간/월간 누적 시간 계산
+        const weekSeconds = await StorageManager.getWeeklyTotal(yesterday);
+        const monthSeconds = await StorageManager.getMonthlyTotal(yesterday);
+
+        console.log('누적 시간 계산 결과:', {
+            어제: totalSeconds / 3600,
+            이번주: weekSeconds / 3600,
+            이번달: monthSeconds / 3600
         });
-        endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit'
+
+        await emailService.sendEmail({
+            to_email: settings.email,
+            date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
+            weekday: weekdays[yesterday.getDay()],
+            start_time: startTime,
+            end_time: endTime,
+            total_hours: (totalSeconds / 3600).toFixed(1),
+            week_hours: (weekSeconds / 3600).toFixed(1),
+            month_hours: (monthSeconds / 3600).toFixed(1),
+            notice_message: yesterdayRecords.length === 0 ? '어제는 근무 기록이 없습니다.' : '',
+            message: '오늘도 화이팅하세요! 🙂'
         });
-        totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
-      }
-
-      // 주간 누적 시간 계산
-      const weekStart = new Date(yesterday);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      weekStart.setHours(0, 0, 0, 0);
-      
-      let weekSeconds = 0;
-      for (let d = new Date(weekStart); d <= yesterday; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        const dayRecords = workRecords.workRecords?.[dateStr] || [];
-        weekSeconds += dayRecords.reduce((total, record) => total + record.duration, 0);
-      }
-
-      // 월간 누적 시간 계산
-      const monthStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), 1);
-      let monthSeconds = 0;
-      for (let d = new Date(monthStart); d <= yesterday; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        const dayRecords = workRecords.workRecords?.[dateStr] || [];
-        monthSeconds += dayRecords.reduce((total, record) => total + record.duration, 0);
-      }
-
-      // 요일 계산
-      const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-      const weekday = weekdays[yesterday.getDay()];
-
-      await emailService.sendEmail({
-        to_email: settings.email,
-        date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
-        weekday: weekday,
-        start_time: startTime,
-        end_time: endTime,
-        total_hours: (totalSeconds / 3600).toFixed(1),
-        week_hours: (weekSeconds / 3600).toFixed(1),
-        month_hours: (monthSeconds / 3600).toFixed(1),
-        notice_message: yesterdayRecords.length === 0 ? '어제는 근무 기록이 없습니다.' : '',
-        message: '오늘도 화이팅하세요! 🙂'
-      });
-
-      console.log('이메일 발송 완료');
     } catch (error) {
-      console.error('이메일 발송 실패:', error);
+        console.error('이메일 발송 실패:', error);
     }
   }
 }
