@@ -12,17 +12,23 @@ class EmailService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Origin': 'chrome-extension://' + chrome.runtime.id
         },
         body: JSON.stringify({
           service_id: this.SERVICE_ID,
           template_id: this.TEMPLATE_ID,
           user_id: this.PUBLIC_KEY,
-          template_params: templateParams
+          accessToken: this.PUBLIC_KEY,
+          template_params: {
+            ...templateParams,
+            'g-recaptcha-response': ''
+          }
         })
       });
 
       if (!response.ok) {
-        throw new Error(`이메일 발송 실패: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `이메일 발송 실패: ${response.status}`);
       }
 
       return true;

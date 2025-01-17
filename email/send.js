@@ -46,6 +46,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         document.getElementById('status').textContent = '이메일 발송 중...';
 
+        // 메시지 생성
+        const timeBasedMessage = yesterdayRecords.length === 0 
+            ? '어제는 근무 기록이 없습니다.'
+            : getTimeBasedMessage(totalSeconds);
+
         // 이메일 발송
         await emailService.sendEmail({
             to_email: settings.email,
@@ -58,9 +63,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             last_week_hours: (lastWeekTotal / 3600).toFixed(1),
             month_hours: (monthTotal / 3600).toFixed(1),
             last_month_hours: (lastMonthTotal / 3600).toFixed(1),
+            message: timeBasedMessage,
             has_notice: yesterdayRecords.length === 0,
-            notices: yesterdayRecords.length === 0 ? ['어제는 근무 기록이 없습니다.'] : [],
-            message: '오늘도 화이팅하세요! 🙂'
+            notices: [],
+            week_status: `${weekday}일 기준`,
         });
 
         document.getElementById('status').textContent = '이메일 발송 완료!';
