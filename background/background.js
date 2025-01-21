@@ -1,4 +1,46 @@
-// 타입 정의
+// ES 모듈 import 제거
+class EmailService {
+  constructor() {
+    this.API_URL = 'https://api.emailjs.com/api/v1.0/email/send';
+    this.PUBLIC_KEY = 'Y-3LlcCV0nOOKq3cU';
+    this.SERVICE_ID = 'service_wf6t5so';
+    this.TEMPLATE_ID = 'template_vflcb3o';
+  }
+
+  async sendEmail(templateParams) {
+    try {
+      const response = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'chrome-extension://' + chrome.runtime.id
+        },
+        body: JSON.stringify({
+          service_id: this.SERVICE_ID,
+          template_id: this.TEMPLATE_ID,
+          user_id: this.PUBLIC_KEY,
+          accessToken: this.PUBLIC_KEY,
+          template_params: {
+            ...templateParams,
+            'g-recaptcha-response': ''
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `이메일 발송 실패: ${response.status}`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('이메일 발송 오류:', error);
+      throw error;
+    }
+  }
+}
+
+// 상수 정의
 const Commands = {
   START_WORK: 'START_WORK',
   STOP_WORK: 'STOP_WORK',
@@ -21,9 +63,10 @@ const DefaultState = {
   savedTotalToday: 0
 };
 
+const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+
 // StorageManager 클래스 정의
 class StorageManager {
-  // storage.js의 내용을 여기로 복사
   static async saveWorkStatus(status) {
     try {
       await chrome.storage.local.set({ workStatus: status });
@@ -35,52 +78,66 @@ class StorageManager {
   static async getWorkStatus() {
     try {
       const { workStatus } = await chrome.storage.local.get('workStatus');
-      return workStatus || {
-        isWorking: false,
-        startTime: null,
-        currentSession: 0,
-        totalToday: 0,
-        autoStopHours: 0
-      };
+      return workStatus || DefaultState;
     } catch (error) {
       console.error('Failed to get work status:', error);
-      return {
-        isWorking: false,
-        startTime: null,
-        currentSession: 0,
-        totalToday: 0,
-        autoStopHours: 0
-      };
+      return DefaultState;
     }
   }
 
-  static async saveWorkRecord(record) {
-    try {
-      const date = new Date().toISOString().split('T')[0];
-      const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-      
-      if (!workRecords[date]) {
-        workRecords[date] = [];
+  // ... 나머지 StorageManager 메서드들
+}
+
+class IconAnimator {
+  constructor() {
+    this.isAnimating = false;
+    this.currentFrame = 0;
+    this.animationInterval = null;
+    this.frames = [
+      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16.png") } },
+      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-1.png") } },
+      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-2.png") } },
+      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-3.png") } },
+      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-4.png") } }
+    ];
+  }
+
+  startAnimation() {
+    if (this.isAnimating) return;
+    
+    this.isAnimating = true;
+    this.animationInterval = setInterval(() => {
+      this.currentFrame = (this.currentFrame % 4) + 1;
+      try {
+        chrome.action.setIcon(this.frames[this.currentFrame]);
+      } catch (error) {
+        console.error('Icon animation error:', error);
+        this.stopAnimation();
       }
-      
-      workRecords[date].push(record);
-      await chrome.storage.local.set({ workRecords });
+    }, 250);
+  }
+
+  stopAnimation() {
+    if (!this.isAnimating) return;
+    
+    clearInterval(this.animationInterval);
+    this.isAnimating = false;
+    this.currentFrame = 0;
+    
+    try {
+      chrome.action.setIcon(this.frames[0]);
     } catch (error) {
-      console.error('Failed to save work record:', error);
+      console.error('Failed to reset icon:', error);
     }
   }
 }
 
-// EmailService 가져오기
-const EmailService = require('../js/email.js');
-
-// WorkManager 클래스는 그대로 유지 (import 제거)
 class WorkManager {
   constructor() {
     this.state = { ...DefaultState };
     this.timer = null;
     this.iconAnimator = new IconAnimator();
-    this.emailService = new EmailService();  // 전역 객체로 사용
+    this.emailService = new EmailService();
     this.initialize();
     this.setupMessageListeners();
     this.setupAlarmListener();
@@ -410,8 +467,8 @@ class WorkManager {
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       
       // 어제의 근무 기록 가져오기
-      const workRecords = await chrome.storage.local.get('workRecords');
-      const yesterdayRecords = workRecords.workRecords?.[yesterdayStr] || [];
+      const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+      const yesterdayRecords = workRecords[yesterdayStr] || [];
 
       // 어제 근무 시간 계산
       let startTime = '기록 없음';
@@ -419,25 +476,25 @@ class WorkManager {
       let totalSeconds = 0;
 
       if (yesterdayRecords.length > 0) {
-          startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
-              hour: '2-digit',
-              minute: '2-digit'
-          });
-          endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
-              hour: '2-digit',
-              minute: '2-digit'
-          });
-          totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
+        startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
       }
 
-      // 주간/월간 누적 시간 계산
-      const weekSeconds = await StorageManager.getWeeklyTotal(yesterday);
-      const monthSeconds = await StorageManager.getMonthlyTotal(yesterday);
+      // 주간 통계 계산
+      const weekTotal = await calculateWeeklyTotal(yesterday);
+      const monthTotal = await calculateMonthlyTotal(yesterday);
 
       console.log('누적 시간 계산 결과:', {
-          어제: totalSeconds / 3600,
-          이번주: weekSeconds / 3600,
-          이번달: monthSeconds / 3600
+        어제: totalSeconds / 3600,
+        이번주: weekTotal / 3600,
+        이번달: monthTotal / 3600
       });
 
       // EmailService를 사용하여 이메일 발송
@@ -448,8 +505,8 @@ class WorkManager {
         start_time: startTime,
         end_time: endTime,
         total_hours: (totalSeconds / 3600).toFixed(1),
-        week_hours: (weekSeconds / 3600).toFixed(1),
-        month_hours: (monthSeconds / 3600).toFixed(1),
+        week_hours: (weekTotal / 3600).toFixed(1),
+        month_hours: (monthTotal / 3600).toFixed(1),
         notice_message: yesterdayRecords.length === 0 ? '어제는 근무 기록이 없습니다.' : '',
         message: '오늘도 화이팅하세요! 🙂'
       });
@@ -461,49 +518,63 @@ class WorkManager {
   }
 }
 
-class IconAnimator {
-  constructor() {
-    this.isAnimating = false;
-    this.currentFrame = 0;
-    this.animationInterval = null;
-    this.frames = [
-      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16.png") } },
-      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-1.png") } },
-      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-2.png") } },
-      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-3.png") } },
-      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-4.png") } }
-    ];
-  }
-
-  startAnimation() {
-    if (this.isAnimating) return;
+// 주간 합계 계산 함수
+async function calculateWeeklyTotal(baseDate) {
+  try {
+    const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+    const weekStart = new Date(baseDate);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    weekStart.setHours(0, 0, 0, 0);
     
-    this.isAnimating = true;
-    this.animationInterval = setInterval(() => {
-      this.currentFrame = (this.currentFrame % 4) + 1;
-      try {
-        chrome.action.setIcon(this.frames[this.currentFrame]);
-      } catch (error) {
-        console.error('Icon animation error:', error);
-        this.stopAnimation();
-      }
-    }, 250);
-  }
-
-  stopAnimation() {
-    if (!this.isAnimating) return;
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const baseDateStr = baseDate.toISOString().split('T')[0];
     
-    clearInterval(this.animationInterval);
-    this.isAnimating = false;
-    this.currentFrame = 0;
+    let weekTotal = 0;
+    Object.entries(workRecords)
+      .filter(([date]) => date >= weekStartStr && date <= baseDateStr)
+      .forEach(([_, dayRecords]) => {
+        weekTotal += dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+      });
     
-    try {
-      chrome.action.setIcon(this.frames[0]);
-    } catch (error) {
-      console.error('Failed to reset icon:', error);
-    }
+    return weekTotal;
+  } catch (error) {
+    console.error('주간 합계 계산 실패:', error);
+    return 0;
   }
 }
 
-// 백그라운드 서비스 시작
-const workManager = new WorkManager(); 
+// 월간 합계 계산 함수
+async function calculateMonthlyTotal(baseDate) {
+  try {
+    const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+    const monthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    
+    const monthStartStr = monthStart.toISOString().split('T')[0];
+    const baseDateStr = baseDate.toISOString().split('T')[0];
+    
+    let monthTotal = 0;
+    Object.entries(workRecords)
+      .filter(([date]) => date >= monthStartStr && date <= baseDateStr)
+      .forEach(([_, dayRecords]) => {
+        monthTotal += dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+      });
+    
+    return monthTotal;
+  } catch (error) {
+    console.error('월간 합계 계산 실패:', error);
+    return 0;
+  }
+}
+
+// Service Worker 초기화
+const workManager = new WorkManager();
+
+// Service Worker 이벤트 리스너
+self.addEventListener('install', (event) => {
+  console.log('Service Worker installed');
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('Service Worker activated');
+}); 

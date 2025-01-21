@@ -1,4 +1,65 @@
-import { StorageManager } from '../js/storage.js';
+// import 문 제거
+
+function getTimeBasedMessage(totalSeconds) {
+    const hours = totalSeconds / 3600;
+    
+    if (hours < 4) {
+        return '오늘은 조금 일찍 퇴근하셨네요! 내일도 화이팅하세요 😊';
+    } else if (hours < 8) {
+        return '오늘도 수고 많으셨습니다! 🌟';
+    } else if (hours < 10) {
+        return '열심히 일하신 하루였네요! 잘 쉬세요 ✨';
+    } else {
+        return '긴 시간 고생 많으셨습니다. 충분한 휴식 취하세요! 💪';
+    }
+}
+
+async function calculateWeeklyTotal(baseDate) {
+    try {
+        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+        const weekStart = new Date(baseDate);
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        
+        const weekStartStr = weekStart.toISOString().split('T')[0];
+        const baseDateStr = baseDate.toISOString().split('T')[0];
+        
+        let weekTotal = 0;
+        Object.entries(workRecords)
+            .filter(([date]) => date >= weekStartStr && date <= baseDateStr)
+            .forEach(([_, dayRecords]) => {
+                weekTotal += dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+            });
+        
+        return weekTotal;
+    } catch (error) {
+        console.error('주간 합계 계산 실패:', error);
+        return 0;
+    }
+}
+
+async function calculateMonthlyTotal(baseDate) {
+    try {
+        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+        const monthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+        monthStart.setHours(0, 0, 0, 0);
+        
+        const monthStartStr = monthStart.toISOString().split('T')[0];
+        const baseDateStr = baseDate.toISOString().split('T')[0];
+        
+        let monthTotal = 0;
+        Object.entries(workRecords)
+            .filter(([date]) => date >= monthStartStr && date <= baseDateStr)
+            .forEach(([_, dayRecords]) => {
+                monthTotal += dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+            });
+        
+        return monthTotal;
+    } catch (error) {
+        console.error('월간 합계 계산 실패:', error);
+        return 0;
+    }
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     try {
@@ -12,7 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         
-        // StorageManager의 메서드 사용
+        // 근무 기록 조회
         const { workRecords = {} } = await chrome.storage.local.get('workRecords');
         const yesterdayStr = yesterday.toISOString().split('T')[0];
         const yesterdayRecords = workRecords[yesterdayStr] || [];
@@ -34,11 +95,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
         }
 
-        // StorageManager의 주간/월간 계산 메서드 사용
-        const weekTotal = await StorageManager.getWeeklyTotal(yesterday);
-        const lastWeekTotal = await StorageManager.getLastWeekTotal(yesterday);
-        const monthTotal = await StorageManager.getMonthlyTotal(yesterday);
-        const lastMonthTotal = await StorageManager.getLastMonthTotal(yesterday);
+        // 주간/월간 통계 계산
+        const weekTotal = await calculateWeeklyTotal(yesterday);
+        const lastWeekTotal = await calculateWeeklyTotal(new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000));
+        const monthTotal = await calculateMonthlyTotal(yesterday);
+        const lastMonthTotal = await calculateMonthlyTotal(new Date(yesterday.getFullYear(), yesterday.getMonth() - 1, yesterday.getDate()));
 
         // 요일 계산
         const weekdays = ['일', '월', '화', '수', '목', '금', '토'];

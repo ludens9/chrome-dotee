@@ -1,5 +1,3 @@
-import { Commands, Events } from '../js/types.js';
-
 class PopupManager {
   constructor() {
     this.initializeElements();
@@ -28,7 +26,7 @@ class PopupManager {
   initializeListeners() {
     // 백그라운드로부터의 메시지 수신
     chrome.runtime.onMessage.addListener((message) => {
-      if (message.type === Events.STATUS_UPDATED) {
+      if (message.type === 'STATUS_UPDATED') {
         this.updateDisplay(message.data);
       }
     });
@@ -53,7 +51,7 @@ class PopupManager {
 
   async requestInitialState() {
     const response = await chrome.runtime.sendMessage({
-      type: Commands.GET_STATUS
+      type: 'GET_STATUS'
     });
     this.updateDisplay(response);
   }
@@ -77,7 +75,7 @@ class PopupManager {
   }
 
   handleWorkToggle(event) {
-    const command = event.target.checked ? Commands.START_WORK : Commands.STOP_WORK;
+    const command = event.target.checked ? 'START_WORK' : 'STOP_WORK';
     console.log('작업 상태 변경:', command);
     chrome.runtime.sendMessage({
       type: command,
@@ -96,7 +94,7 @@ class PopupManager {
     });
     
     chrome.runtime.sendMessage({
-      type: Commands.SET_AUTO_STOP,
+      type: 'SET_AUTO_STOP',
       data: value  // parseFloat 값 사용
     });
   }

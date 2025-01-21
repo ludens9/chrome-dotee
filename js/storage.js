@@ -1,4 +1,4 @@
-export class StorageManager {
+class StorageManager {
   static async saveSettings(settings) {
     return chrome.storage.local.set(settings);
   }
@@ -76,67 +76,76 @@ export class StorageManager {
   static async getWorkRecords() {
     try {
       const { workRecords } = await chrome.storage.local.get('workRecords');
-      console.log('불러온 전체 근무 기록:', workRecords);
       return workRecords || {};
     } catch (error) {
-      console.error('Failed to get work records:', error);
+      console.error('근무 기록 조회 실패:', error);
       return {};
     }
   }
 
   static async getWeeklyTotal(baseDate = new Date()) {
-    const records = await this.getWorkRecords();
-    const weekStart = new Date(baseDate);
-    const day = weekStart.getDay();
-    const mondayOffset = day === 0 ? -6 : 1 - day;  // 일요일이면 -6, 아니면 1-day
-    weekStart.setDate(weekStart.getDate() + mondayOffset);  // 월요일로 설정
-    weekStart.setHours(0, 0, 0, 0);
-    
-    const weekStartStr = weekStart.toISOString().split('T')[0];
-    const baseDateStr = baseDate.toISOString().split('T')[0];
-    
-    console.log('주간 범위:', {
-        시작일: weekStartStr,
-        종료일: baseDateStr
-    });
-    
-    let weekTotal = 0;
-    Object.entries(records)
-        .filter(([date]) => date >= weekStartStr && date <= baseDateStr)
-        .sort()  // 날짜순 정렬
-        .forEach(([date, dayRecords]) => {
-            const dayTotal = dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
-            console.log(`${date} 근무:`, (dayTotal / 3600).toFixed(1) + '시간');
-            weekTotal += dayTotal;
-        });
-    
-    console.log('주간 누적:', (weekTotal / 3600).toFixed(1) + '시간');
-    return weekTotal;
+    try {
+      const records = await this.getWorkRecords();
+      const weekStart = new Date(baseDate);
+      const day = weekStart.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;  // 일요일이면 -6, 아니면 1-day
+      weekStart.setDate(weekStart.getDate() + mondayOffset);  // 월요일로 설정
+      weekStart.setHours(0, 0, 0, 0);
+      
+      const weekStartStr = weekStart.toISOString().split('T')[0];
+      const baseDateStr = baseDate.toISOString().split('T')[0];
+      
+      console.log('주간 범위:', {
+          시작일: weekStartStr,
+          종료일: baseDateStr
+      });
+      
+      let weekTotal = 0;
+      Object.entries(records)
+          .filter(([date]) => date >= weekStartStr && date <= baseDateStr)
+          .sort()  // 날짜순 정렬
+          .forEach(([date, dayRecords]) => {
+              const dayTotal = dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+              console.log(`${date} 근무:`, (dayTotal / 3600).toFixed(1) + '시간');
+              weekTotal += dayTotal;
+          });
+      
+      console.log('주간 누적:', (weekTotal / 3600).toFixed(1) + '시간');
+      return weekTotal;
+    } catch (error) {
+      console.error('주간 합계 계산 실패:', error);
+      return 0;
+    }
   }
 
   static async getMonthlyTotal(baseDate = new Date()) {
-    const records = await this.getWorkRecords();
-    const monthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
-    monthStart.setHours(0, 0, 0, 0);
-    
-    const monthStartStr = monthStart.toISOString().split('T')[0];
-    const baseDateStr = baseDate.toISOString().split('T')[0];
-    
-    console.log('월간 범위:', {
-        시작일: monthStartStr,
-        종료일: baseDateStr
-    });
-    
-    let monthTotal = 0;
-    Object.entries(records)
-        .filter(([date]) => date >= monthStartStr && date <= baseDateStr)
-        .forEach(([date, dayRecords]) => {
-            const dayTotal = dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
-            console.log(`${date} 누적:`, dayTotal / 3600, '시간');
-            monthTotal += dayTotal;
-        });
-    
-    return monthTotal;
+    try {
+      const records = await this.getWorkRecords();
+      const monthStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+      monthStart.setHours(0, 0, 0, 0);
+      
+      const monthStartStr = monthStart.toISOString().split('T')[0];
+      const baseDateStr = baseDate.toISOString().split('T')[0];
+      
+      console.log('월간 범위:', {
+          시작일: monthStartStr,
+          종료일: baseDateStr
+      });
+      
+      let monthTotal = 0;
+      Object.entries(records)
+          .filter(([date]) => date >= monthStartStr && date <= baseDateStr)
+          .forEach(([date, dayRecords]) => {
+              const dayTotal = dayRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+              console.log(`${date} 누적:`, dayTotal / 3600, '시간');
+              monthTotal += dayTotal;
+          });
+      
+      return monthTotal;
+    } catch (error) {
+      console.error('월간 합계 계산 실패:', error);
+      return 0;
+    }
   }
 
   static async saveWorkStatus(status) {
@@ -211,14 +220,24 @@ export class StorageManager {
   }
 
   static async getLastWeekTotal(baseDate = new Date()) {
-    const lastWeekEnd = new Date(baseDate);
-    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);  // 일주일 전으로
-    return this.getWeeklyTotal(lastWeekEnd);
+    try {
+      const lastWeekEnd = new Date(baseDate);
+      lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);  // 일주일 전으로
+      return this.getWeeklyTotal(lastWeekEnd);
+    } catch (error) {
+      console.error('지난주 합계 계산 실패:', error);
+      return 0;
+    }
   }
 
   static async getLastMonthTotal(baseDate = new Date()) {
-    const lastMonthEnd = new Date(baseDate);
-    lastMonthEnd.setMonth(lastMonthEnd.getMonth() - 1);  // 한 달 전으로
-    return this.getMonthlyTotal(lastMonthEnd);
+    try {
+      const lastMonthEnd = new Date(baseDate);
+      lastMonthEnd.setMonth(lastMonthEnd.getMonth() - 1);  // 한 달 전으로
+      return this.getMonthlyTotal(lastMonthEnd);
+    } catch (error) {
+      console.error('지난달 합계 계산 실패:', error);
+      return 0;
+    }
   }
 } 

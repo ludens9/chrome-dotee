@@ -37,7 +37,4 @@ class EmailService {
       throw error;
     }
   }
-}
-
-// 전역 객체로 노출
-window.EmailService = EmailService; 
+} 
