@@ -63,6 +63,10 @@ class PopupManager {
 
     this.workToggle.checked = state.isWorking;
     this.currentSessionEl.textContent = this.formatTime(state.currentSession || 0);
+    
+    // 근무 중일 때 자동종료 선택 비활성화
+    this.autoStopSelect.disabled = state.isWorking;
+    
     // 날짜 표시 업데이트
     const today = new Date();
     const dateStr = this.formatDate(today);

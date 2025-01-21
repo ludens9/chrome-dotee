@@ -1,44 +1,8 @@
 // ES 모듈 import 제거
-class EmailService {
-  constructor() {
-    this.API_URL = 'https://api.emailjs.com/api/v1.0/email/send';
-    this.PUBLIC_KEY = 'Y-3LlcCV0nOOKq3cU';
-    this.SERVICE_ID = 'service_wf6t5so';
-    this.TEMPLATE_ID = 'template_vflcb3o';
-  }
-
-  async sendEmail(templateParams) {
-    try {
-      const response = await fetch(this.API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Origin': 'chrome-extension://' + chrome.runtime.id
-        },
-        body: JSON.stringify({
-          service_id: this.SERVICE_ID,
-          template_id: this.TEMPLATE_ID,
-          user_id: this.PUBLIC_KEY,
-          accessToken: this.PUBLIC_KEY,
-          template_params: {
-            ...templateParams,
-            'g-recaptcha-response': ''
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `이메일 발송 실패: ${response.status}`);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('이메일 발송 오류:', error);
-      throw error;
-    }
-  }
-}
+importScripts(
+  '../js/storage.js',
+  '../js/email.js'
+);
 
 // 상수 정의
 const Commands = {
@@ -65,70 +29,68 @@ const DefaultState = {
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
-// StorageManager 클래스 정의
-class StorageManager {
-  static async saveWorkStatus(status) {
-    try {
-      await chrome.storage.local.set({ workStatus: status });
-    } catch (error) {
-      console.error('Failed to save work status:', error);
-    }
-  }
-
-  static async getWorkStatus() {
-    try {
-      const { workStatus } = await chrome.storage.local.get('workStatus');
-      return workStatus || DefaultState;
-    } catch (error) {
-      console.error('Failed to get work status:', error);
-      return DefaultState;
-    }
-  }
-
-  // ... 나머지 StorageManager 메서드들
-}
-
 class IconAnimator {
   constructor() {
     this.isAnimating = false;
     this.currentFrame = 0;
     this.animationInterval = null;
-    this.frames = [
-      { path: { "16": chrome.runtime.getURL("assets/icons/icon-16.png") } },
+    this.defaultIcon = { 
+      path: {
+        "16": chrome.runtime.getURL("assets/icons/icon-default-16.png"),
+        "48": chrome.runtime.getURL("assets/icons/icon-default-48.png"),
+        "128": chrome.runtime.getURL("assets/icons/icon-default-128.png")
+      }
+    };
+    this.animationFrames = [
       { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-1.png") } },
       { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-2.png") } },
       { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-3.png") } },
       { path: { "16": chrome.runtime.getURL("assets/icons/icon-16-4.png") } }
     ];
+
+    // 생성자에서 기본 아이콘 설정
+    this.resetToDefault();
+  }
+
+  resetToDefault() {
+    // 애니메이션 중지
+    if (this.animationInterval) {
+      clearInterval(this.animationInterval);
+      this.animationInterval = null;
+    }
+    this.isAnimating = false;
+    this.currentFrame = 0;
+
+    // 기본 아이콘 설정 (여러 사이즈 지원)
+    chrome.action.setIcon(this.defaultIcon).catch(error => {
+      console.error('Failed to set default icon:', error);
+    });
   }
 
   startAnimation() {
     if (this.isAnimating) return;
     
     this.isAnimating = true;
-    this.animationInterval = setInterval(() => {
-      this.currentFrame = (this.currentFrame % 4) + 1;
-      try {
-        chrome.action.setIcon(this.frames[this.currentFrame]);
-      } catch (error) {
-        console.error('Icon animation error:', error);
-        this.stopAnimation();
-      }
-    }, 250);
-  }
-
-  stopAnimation() {
-    if (!this.isAnimating) return;
-    
-    clearInterval(this.animationInterval);
-    this.isAnimating = false;
     this.currentFrame = 0;
     
-    try {
-      chrome.action.setIcon(this.frames[0]);
-    } catch (error) {
-      console.error('Failed to reset icon:', error);
-    }
+    chrome.action.setIcon(this.animationFrames[0]).catch(error => {
+      console.error('Failed to set initial animation frame:', error);
+      this.resetToDefault();
+      return;
+    });
+    
+    this.animationInterval = setInterval(() => {
+      try {
+        this.currentFrame = (this.currentFrame + 1) % this.animationFrames.length;
+        chrome.action.setIcon(this.animationFrames[this.currentFrame]).catch(error => {
+          console.error('Failed to set animation frame:', error);
+          this.resetToDefault();
+        });
+      } catch (error) {
+        console.error('Icon animation error:', error);
+        this.resetToDefault();
+      }
+    }, 250);
   }
 }
 
@@ -137,7 +99,6 @@ class WorkManager {
     this.state = { ...DefaultState };
     this.timer = null;
     this.iconAnimator = new IconAnimator();
-    this.emailService = new EmailService();
     this.initialize();
     this.setupMessageListeners();
     this.setupAlarmListener();
@@ -151,39 +112,59 @@ class WorkManager {
       this.state = { ...DefaultState, ...saved };
       if (this.state.isWorking) {
         this.startTimer();
+        this.iconAnimator.startAnimation();
+      } else {
+        // 근무 중이 아닐 때는 무조건 기본 아이콘으로 설정
+        this.iconAnimator.resetToDefault();
       }
+    } else {
+      // 저장된 상태가 없을 때도 기본 아이콘으로 설정
+      this.iconAnimator.resetToDefault();
     }
   }
 
   setupMessageListeners() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        switch (message.type) {
-            case Commands.START_WORK:
-                this.startWork(message.data);
-                break;
-            case Commands.STOP_WORK:
-                this.stopWork();
-                break;
-            case Commands.GET_STATUS:
-                sendResponse(this.state);
-                break;
-            case Commands.SET_AUTO_STOP:
-                this.setAutoStop(message.data);
-                break;
-            case 'SETUP_EMAIL_ALARM':
-                this.setupEmailAlarm();
-                sendResponse();
-                break;
-            case 'TEST_EMAIL_REPORT':
-                chrome.tabs.create({
-                    url: chrome.runtime.getURL('email/send.html')
-                }).then(() => {
-                    console.log('이메일 발송 페이지 열림');
-                }).catch(error => {
-                    console.error('이메일 발송 테스트 실패:', error);
-                });
-                break;
-        }
+        (async () => {  // 비동기 처리를 위한 즉시실행 async 함수
+            try {
+                switch (message.type) {
+                    case Commands.START_WORK:
+                        await this.startWork(message.data);
+                        sendResponse({ success: true });
+                        break;
+                    case Commands.STOP_WORK:
+                        await this.stopWork();
+                        sendResponse({ success: true });
+                        break;
+                    case Commands.GET_STATUS:
+                        sendResponse(this.state);
+                        break;
+                    case Commands.SET_AUTO_STOP:
+                        await this.setAutoStop(message.data);
+                        sendResponse({ success: true });
+                        break;
+                    case 'SETUP_EMAIL_ALARM':
+                        await this.setupEmailAlarm();
+                        sendResponse({ success: true });
+                        break;
+                    case 'TEST_EMAIL_REPORT':
+                        try {
+                            await chrome.tabs.create({
+                                url: chrome.runtime.getURL('email/send.html')
+                            });
+                            console.log('이메일 발송 페이지 열림');
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            console.error('이메일 발송 테스트 실패:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                }
+            } catch (error) {
+                console.error('Message handling error:', error);
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
         return true;  // 비동기 응답을 위해 true 반환
     });
   }
@@ -268,7 +249,7 @@ class WorkManager {
     };
     
     this.stopTimer();
-    this.iconAnimator.stopAnimation();
+    this.iconAnimator.resetToDefault(); // stopAnimation 대신 resetToDefault 사용
     await this.saveAndNotify();
 
     const record = {
@@ -458,62 +439,59 @@ class WorkManager {
 
   async sendDailyReport() {
     try {
-      const settings = await chrome.storage.local.get(['email', 'reportTime']);
-      if (!settings.email) return;
+        const settings = await chrome.storage.local.get(['email', 'reportTime']);
+        if (!settings.email) return;
 
-      // 어제 날짜 계산
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      
-      // 어제의 근무 기록 가져오기
-      const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-      const yesterdayRecords = workRecords[yesterdayStr] || [];
+        // 어제 날짜 계산
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        // 어제의 근무 기록 가져오기
+        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+        const yesterdayRecords = workRecords[yesterdayStr] || [];
 
-      // 어제 근무 시간 계산
-      let startTime = '기록 없음';
-      let endTime = '기록 없음';
-      let totalSeconds = 0;
+        // 어제 근무 시간 계산
+        let startTime = '기록 없음';
+        let endTime = '기록 없음';
+        let totalSeconds = 0;
 
-      if (yesterdayRecords.length > 0) {
-        startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit'
+        if (yesterdayRecords.length > 0) {
+            startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
+        }
+
+        // 주간 통계 계산
+        const weekTotal = await calculateWeeklyTotal(yesterday);
+        const monthTotal = await calculateMonthlyTotal(yesterday);
+
+        // EmailService 인스턴스 생성
+        const emailService = new EmailService();  // 여기를 수정
+
+        // 이메일 발송
+        await emailService.sendEmail({
+            to_email: settings.email,
+            date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
+            weekday: weekdays[yesterday.getDay()],
+            start_time: startTime,
+            end_time: endTime,
+            total_hours: (totalSeconds / 3600).toFixed(1),
+            week_hours: (weekTotal / 3600).toFixed(1),
+            month_hours: (monthTotal / 3600).toFixed(1),
+            notice_message: yesterdayRecords.length === 0 ? '어제는 근무 기록이 없습니다.' : '',
+            message: '오늘도 화이팅하세요! 🙂'
         });
-        endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-        totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
-      }
 
-      // 주간 통계 계산
-      const weekTotal = await calculateWeeklyTotal(yesterday);
-      const monthTotal = await calculateMonthlyTotal(yesterday);
-
-      console.log('누적 시간 계산 결과:', {
-        어제: totalSeconds / 3600,
-        이번주: weekTotal / 3600,
-        이번달: monthTotal / 3600
-      });
-
-      // EmailService를 사용하여 이메일 발송
-      await this.emailService.sendEmail({
-        to_email: settings.email,
-        date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
-        weekday: weekdays[yesterday.getDay()],
-        start_time: startTime,
-        end_time: endTime,
-        total_hours: (totalSeconds / 3600).toFixed(1),
-        week_hours: (weekTotal / 3600).toFixed(1),
-        month_hours: (monthTotal / 3600).toFixed(1),
-        notice_message: yesterdayRecords.length === 0 ? '어제는 근무 기록이 없습니다.' : '',
-        message: '오늘도 화이팅하세요! 🙂'
-      });
-
-      console.log('이메일 발송 완료');
+        console.log('이메일 발송 완료');
     } catch (error) {
-      console.error('이메일 발송 실패:', error);
+        console.error('이메일 발송 실패:', error);
     }
   }
 }

@@ -23,17 +23,17 @@
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "assets/icons/icon-16.png",
-      "48": "assets/icons/icon-48.png",
-      "128": "assets/icons/icon-128.png"
+      "16": "assets/icons/icon-default-16.png",
+      "48": "assets/icons/icon-default-48.png",
+      "128": "assets/icons/icon-default-128.png"
     }
   },
   "background": {
     "service_worker": "background/background.js"
   },
   "icons": {
-    "16": "assets/icons/icon-16.png",
-    "48": "assets/icons/icon-48.png",
-    "128": "assets/icons/icon-128.png"
+    "16": "assets/icons/icon-default-16.png",
+    "48": "assets/icons/icon-default-48.png",
+    "128": "assets/icons/icon-default-128.png"
   }
 } 
