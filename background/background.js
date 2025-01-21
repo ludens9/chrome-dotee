@@ -1,7 +1,8 @@
 // ES 모듈 import 제거
 importScripts(
   '../js/storage.js',
-  '../js/email.js'
+  '../js/email.js',
+  '../js/messageUtil.js'
 );
 
 // 상수 정의
@@ -451,7 +452,7 @@ class WorkManager {
         const { workRecords = {} } = await chrome.storage.local.get('workRecords');
         const yesterdayRecords = workRecords[yesterdayStr] || [];
 
-        // 어제 근무 시간 계산
+        // 근무 시간 계산
         let startTime = '기록 없음';
         let endTime = '기록 없음';
         let totalSeconds = 0;
@@ -468,12 +469,19 @@ class WorkManager {
             totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
         }
 
-        // 주간 통계 계산
+        // 주간/월간 통계 계산
         const weekTotal = await calculateWeeklyTotal(yesterday);
+        const lastWeekTotal = await calculateWeeklyTotal(new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000));
         const monthTotal = await calculateMonthlyTotal(yesterday);
+        const lastMonthTotal = await calculateMonthlyTotal(new Date(yesterday.getFullYear(), yesterday.getMonth() - 1, yesterday.getDate()));
+
+        // 메시지 생성 - getTimeBasedMessage 함수 사용
+        const timeBasedMessage = yesterdayRecords.length === 0 
+            ? getTimeBasedMessage(0, false)  // 근무 기록이 없는 경우
+            : getTimeBasedMessage(totalSeconds, true);  // 근무 기록이 있는 경우
 
         // EmailService 인스턴스 생성
-        const emailService = new EmailService();  // 여기를 수정
+        const emailService = new EmailService();
 
         // 이메일 발송
         await emailService.sendEmail({
@@ -484,9 +492,13 @@ class WorkManager {
             end_time: endTime,
             total_hours: (totalSeconds / 3600).toFixed(1),
             week_hours: (weekTotal / 3600).toFixed(1),
+            last_week_hours: (lastWeekTotal / 3600).toFixed(1),
             month_hours: (monthTotal / 3600).toFixed(1),
-            notice_message: yesterdayRecords.length === 0 ? '어제는 근무 기록이 없습니다.' : '',
-            message: '오늘도 화이팅하세요! 🙂'
+            last_month_hours: (lastMonthTotal / 3600).toFixed(1),
+            message: timeBasedMessage,
+            has_notice: yesterdayRecords.length === 0,
+            notices: [],
+            week_status: `${weekdays[yesterday.getDay()]}일 기준`
         });
 
         console.log('이메일 발송 완료');
@@ -555,4 +567,27 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   console.log('Service Worker activated');
-}); 
+});
+
+function getTimeBasedMessage(totalSeconds, hasRecord = true) {
+    if (!hasRecord) {
+        return `Had a good rest yesterday? Let's start fresh today! 😊
+어제 푹 쉬었으니 오늘은 상쾌하게 시작해볼까? 😊`;
+    }
+    
+    const hours = totalSeconds / 3600;
+    
+    if (hours < 4) {
+        return `Yesterday was a short day! Shall we pump up the energy today? 🌱
+어제는 짧게 일했네! 오늘은 좀 더 힘내볼까? 🌱`;
+    } else if (hours < 8) {
+        return `Nice job wrapping up yesterday! Let's make today another good one 🌟
+어제 하루 잘 마무리했어! 오늘도 좋은 하루 만들어보자 🌟`;
+    } else if (hours < 10) {
+        return `You worked hard yesterday! Take it easy today, okay? ✨
+어제 열심히 했으니 오늘은 적당히 쉬어가면서 하자 ✨`;
+    } else {
+        return `Wow, that was a long day yesterday! Remember to take breaks today 💪
+어제 진짜 많이 일했다! 오늘은 틈틈이 쉬면서 하자 💪`;
+    }
+} 

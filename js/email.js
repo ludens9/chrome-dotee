@@ -8,6 +8,15 @@ class EmailService {
 
   async sendEmail(templateParams) {
     try {
+      const payload = {
+        service_id: this.SERVICE_ID,
+        template_id: this.TEMPLATE_ID,
+        user_id: this.PUBLIC_KEY,
+        template_params: templateParams
+      };
+      
+      console.log('Sending email payload:', payload);
+
       const response = await fetch(this.API_URL, {
         method: 'POST',
         headers: {

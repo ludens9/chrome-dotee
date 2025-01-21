@@ -1,16 +1,26 @@
 // import 문 제거
+// getTimeBasedMessage 함수는 messageUtil.js에서 전역으로 사용 가능
 
-function getTimeBasedMessage(totalSeconds) {
+function getTimeBasedMessage(totalSeconds, hasRecord = true) {
+    if (!hasRecord) {
+        return `Had a good rest yesterday? Let's start fresh today! 😊
+어제 푹 쉬었으니 오늘은 상쾌하게 시작해볼까? 😊`;
+    }
+    
     const hours = totalSeconds / 3600;
     
     if (hours < 4) {
-        return '오늘은 조금 일찍 퇴근하셨네요! 내일도 화이팅하세요 😊';
+        return `Yesterday was a short day! Shall we pump up the energy today? 🌱
+어제는 짧게 일했네! 오늘은 좀 더 힘내볼까? 🌱`;
     } else if (hours < 8) {
-        return '오늘도 수고 많으셨습니다! 🌟';
+        return `Nice job wrapping up yesterday! Let's make today another good one 🌟
+어제 하루 잘 마무리했어! 오늘도 좋은 하루 만들어보자 🌟`;
     } else if (hours < 10) {
-        return '열심히 일하신 하루였네요! 잘 쉬세요 ✨';
+        return `You worked hard yesterday! Take it easy today, okay? ✨
+어제 열심히 했으니 오늘은 적당히 쉬어가면서 하자 ✨`;
     } else {
-        return '긴 시간 고생 많으셨습니다. 충분한 휴식 취하세요! 💪';
+        return `Wow, that was a long day yesterday! Remember to take breaks today 💪
+어제 진짜 많이 일했다! 오늘은 틈틈이 쉬면서 하자 💪`;
     }
 }
 
@@ -109,8 +119,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 메시지 생성
         const timeBasedMessage = yesterdayRecords.length === 0 
-            ? '어제는 근무 기록이 없습니다.'
-            : getTimeBasedMessage(totalSeconds);
+            ? getTimeBasedMessage(0, false)  // 근무 기록이 없는 경우
+            : getTimeBasedMessage(totalSeconds, true);  // 근무 기록이 있는 경우
 
         // 이메일 발송
         await emailService.sendEmail({
