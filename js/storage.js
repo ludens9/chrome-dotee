@@ -13,63 +13,73 @@ class StorageManager {
 
   static async saveWorkRecord(record) {
     try {
-      const startDate = new Date(record.startTime);
-      const dateStr = startDate.toISOString().split('T')[0];
+      // 필수 필드 검증
+      if (!record.startTime || !record.endTime || !record.duration) {
+        console.error('잘못된 기록 형식:', record);
+        return;
+      }
+
+      // 시작 시간과 종료 시간이 유효한지 확인
+      const startTime = new Date(record.startTime);
+      const endTime = new Date(record.endTime);
       
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        console.error('잘못된 시간 형식:', record);
+        return;
+      }
+
+      // 현재 시간과 비교하여 유효성 검사
+      const now = new Date();
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(now.getFullYear() - 1);
+
+      if (startTime < oneYearAgo || endTime > now) {
+        console.error('유효하지 않은 시간 범위:', {
+          시작: startTime.toLocaleString(),
+          종료: endTime.toLocaleString()
+        });
+        return;
+      }
+
+      // duration 유효성 검사
+      const calculatedDuration = Math.floor((endTime - startTime) / 1000);
+      if (Math.abs(calculatedDuration - record.duration) > 60) { // 1분 이상 차이나면 오류
+        console.error('시간 계산 불일치:', {
+          계산된_시간: calculatedDuration,
+          기록된_시간: record.duration
+        });
+        return;
+      }
+
+      const dateStr = startTime.toISOString().split('T')[0];
       const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-      
-      console.log('근무 기록 저장:', {
-        기준날짜: dateStr,
-        시작시간: new Date(record.startTime).toLocaleString(),
-        종료시간: new Date(record.endTime).toLocaleString(),
-        근무시간: (record.duration / 3600).toFixed(1) + '시간'
-      });
       
       if (!workRecords[dateStr]) {
         workRecords[dateStr] = [];
       }
-      
-      const endDate = new Date(record.endTime);
-      const endDateStr = endDate.toISOString().split('T')[0];
-      
-      if (dateStr !== endDateStr) {
-        const midnight = new Date(endDateStr);
-        midnight.setHours(0, 0, 0, 0);
-        
-        const firstDayDuration = Math.floor((midnight - startDate) / 1000);
-        workRecords[dateStr].push({
-          startTime: record.startTime,
-          endTime: midnight.toISOString(),
-          duration: firstDayDuration,
-          date: dateStr
-        });
-        
-        const secondDayDuration = Math.floor((endDate - midnight) / 1000);
-        if (!workRecords[endDateStr]) {
-          workRecords[endDateStr] = [];
-        }
-        workRecords[endDateStr].push({
-          startTime: midnight.toISOString(),
-          endTime: record.endTime,
-          duration: secondDayDuration,
-          date: endDateStr
-        });
-        
-        console.log('자정 넘김 처리:', {
-          첫째날: `${dateStr} (${firstDayDuration / 3600}시간)`,
-          둘째날: `${endDateStr} (${secondDayDuration / 3600}시간)`
-        });
-      } else {
-        workRecords[dateStr].push({
-          ...record,
-          date: dateStr
-        });
-      }
+
+      // 새로운 기록 추가
+      workRecords[dateStr].push({
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        duration: record.duration,
+        date: dateStr
+      });
+
+      console.log('근무 기록 저장:', {
+        날짜: dateStr,
+        시작: startTime.toLocaleString(),
+        종료: endTime.toLocaleString(),
+        시간: `${Math.floor(record.duration/3600)}시간 ${Math.floor((record.duration%3600)/60)}분`
+      });
+
+      // 시간순 정렬
+      workRecords[dateStr].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
       
       await chrome.storage.local.set({ workRecords });
-      console.log('저장 완료된 전체 기록:', workRecords);
+      
     } catch (error) {
-      console.error('Failed to save work record:', error);
+      console.error('근무 기록 저장 실패:', error);
     }
   }
 
@@ -150,7 +160,16 @@ class StorageManager {
 
   static async saveWorkStatus(status) {
     try {
+      // 저장 전 상태 로깅
+      console.log('저장할 상태:', status);
+      
+      // 상태 저장
       await chrome.storage.local.set({ workStatus: status });
+      
+      // 저장 후 확인
+      const saved = await chrome.storage.local.get('workStatus');
+      console.log('저장된 상태:', saved.workStatus);
+      
     } catch (error) {
       console.error('Failed to save work status:', error);
     }

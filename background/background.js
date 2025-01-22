@@ -20,12 +20,14 @@ const Events = {
   DAY_CHANGED: 'DAY_CHANGED'
 };
 
+// DefaultState 정의 확인
 const DefaultState = {
   isWorking: false,
   startTime: null,
   currentSession: 0,
   totalToday: 0,
-  savedTotalToday: 0
+  savedTotalToday: 0,
+  autoStopHours: 0
 };
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
@@ -126,47 +128,51 @@ class WorkManager {
 
   setupMessageListeners() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        (async () => {  // 비동기 처리를 위한 즉시실행 async 함수
+        // 메시지 처리를 Promise로 래핑
+        const handleMessage = async () => {
             try {
                 switch (message.type) {
                     case Commands.START_WORK:
                         await this.startWork(message.data);
-                        sendResponse({ success: true });
-                        break;
+                        return { success: true };
                     case Commands.STOP_WORK:
                         await this.stopWork();
-                        sendResponse({ success: true });
-                        break;
+                        return { success: true };
                     case Commands.GET_STATUS:
-                        sendResponse(this.state);
-                        break;
+                        return this.state;
                     case Commands.SET_AUTO_STOP:
                         await this.setAutoStop(message.data);
-                        sendResponse({ success: true });
-                        break;
+                        return { success: true };
                     case 'SETUP_EMAIL_ALARM':
                         await this.setupEmailAlarm();
-                        sendResponse({ success: true });
-                        break;
+                        return { success: true };
                     case 'TEST_EMAIL_REPORT':
                         try {
                             await chrome.tabs.create({
                                 url: chrome.runtime.getURL('email/send.html')
                             });
                             console.log('이메일 발송 페이지 열림');
-                            sendResponse({ success: true });
+                            return { success: true };
                         } catch (error) {
                             console.error('이메일 발송 테스트 실패:', error);
-                            sendResponse({ success: false, error: error.message });
+                            return { success: false, error: error.message };
                         }
-                        break;
+                    case 'MIDNIGHT_RESET_TEST':
+                        await this.handleMidnightReset();
+                        return { success: true };
                 }
             } catch (error) {
                 console.error('Message handling error:', error);
-                sendResponse({ success: false, error: error.message });
+                return { success: false, error: error.message };
             }
-        })();
-        return true;  // 비동기 응답을 위해 true 반환
+        };
+
+        // Promise 처리 및 응답 전송
+        handleMessage().then(response => {
+            sendResponse(response);
+        });
+
+        return true;  // 비동기 응답을 위해 반드시 필요
     });
   }
 
@@ -213,75 +219,88 @@ class WorkManager {
   }
 
   async startWork(data = {}) {
-    this.state = {
-      ...this.state,
-      isWorking: true,
-      startTime: new Date().toISOString(),
-      currentSession: 0,
-      savedTotalToday: this.state.totalToday || 0,
-      autoStopHours: data.autoStopHours !== null ? data.autoStopHours : (this.state.autoStopHours || 0)
-    };
-    
-    this.startTimer();
-    this.iconAnimator.startAnimation();
-    await this.saveAndNotify();
-    
-    if (this.state.autoStopHours > 0) {
-      this.setupAutoStop();
+    try {
+        // 현재 시간을 정확하게 가져옴
+        const now = new Date();
+        
+        this.state = {
+            ...this.state,
+            isWorking: true,
+            startTime: now.toISOString(),  // ISO 문자열로 변환
+            currentSession: 0,
+            savedTotalToday: this.state.totalToday || 0,
+            autoStopHours: data.autoStopHours !== null ? data.autoStopHours : (this.state.autoStopHours || 0)
+        };
+        
+        console.log('근무 시작:', {
+            시작시간: now.toLocaleString(),
+            상태: this.state
+        });
+        
+        this.startTimer();
+        this.iconAnimator.startAnimation();
+        await this.saveAndNotify();
+        
+        if (this.state.autoStopHours > 0) {
+            this.setupAutoStop();
+        }
+    } catch (error) {
+        console.error('근무 시작 실패:', error);
     }
   }
 
   async stopWork() {
-    if (!this.state.isWorking) return;
+    try {
+        if (!this.state.isWorking || !this.state.startTime) return;
 
-    const sessionDuration = this.state.currentSession;
-    const prevAutoStopHours = this.state.autoStopHours;
-    
-    console.log('근무 종료 시점 상태:', {
-        세션시간: sessionDuration,
-        시작시간: this.state.startTime,
-        종료시간: new Date().toISOString()
-    });
-    
-    this.state = {
-        ...DefaultState,
-        totalToday: this.state.totalToday,
-        autoStopHours: prevAutoStopHours
-    };
-    
-    this.stopTimer();
-    this.iconAnimator.resetToDefault(); // stopAnimation 대신 resetToDefault 사용
-    await this.saveAndNotify();
-
-    const record = {
-        duration: sessionDuration,
-        startTime: this.state.startTime,
-        endTime: new Date().toISOString()
-    };
-    console.log('저장되는 근무 기록:', record);
-    
-    await StorageManager.saveWorkRecord(record);
+        const now = new Date();
+        const endTime = now.toISOString();
+        const sessionDuration = this.state.currentSession;
+        
+        console.log('근무 종료:', {
+            시작: new Date(this.state.startTime).toLocaleString(),
+            종료: now.toLocaleString(),
+            시간: sessionDuration
+        });
+        
+        // 세션 기록 저장
+        const record = {
+            startTime: this.state.startTime,
+            endTime: endTime,
+            duration: sessionDuration,
+            date: new Date(this.state.startTime).toISOString().split('T')[0]
+        };
+        
+        await StorageManager.saveWorkRecord(record);
+        
+        // 상태 초기화
+        this.state = {
+            ...DefaultState,
+            totalToday: this.state.totalToday,
+            autoStopHours: this.state.autoStopHours
+        };
+        
+        this.stopTimer();
+        this.iconAnimator.resetToDefault();
+        await this.saveAndNotify();
+    } catch (error) {
+        console.error('근무 종료 실패:', error);
+    }
   }
 
   async saveAndNotify() {
     await StorageManager.saveWorkStatus(this.state);
     try {
-      // 상태 업데이트 로그
-      console.log('Current state:', {
-        currentSession: this.state.currentSession,
-        totalToday: this.state.totalToday,
-        isWorking: this.state.isWorking
-      });
-      
-      // 메시지 전송 시도 (실패는 무시)
-      chrome.runtime.sendMessage({
-        type: Events.STATUS_UPDATED,
-        data: this.state
-      }).catch(() => {
-        // 팝업이 닫혀있는 경우 무시
-      });
+        chrome.runtime.sendMessage({
+            type: Events.STATUS_UPDATED,
+            data: this.state
+        }).catch(() => {
+            // 무시해도 되는 오류
+            console.log('Popup might be closed, ignoring message send');
+        });
     } catch (error) {
-      console.log('Notification skipped - popup might be closed');
+        // 무시해도 되는 오류
+        console.log('Notification skipped - popup might be closed');
     }
   }
 
@@ -360,17 +379,18 @@ class WorkManager {
 
   setupAlarmListener() {
     chrome.alarms.onAlarm.addListener(async (alarm) => {
-      try {
-        if (alarm.name === 'autoStop') {
-          await this.handleAutoStop();
-        } else if (alarm.name === 'midnight') {
-          await this.handleMidnightReset();
-        } else if (alarm.name === 'emailReport') {
-          await this.sendDailyReport();  // 직접 이메일 발송
+        try {
+            if (alarm.name === 'autoStop') {
+                await this.handleAutoStop();
+            } else if (alarm.name === 'midnight') {
+                await this.handleMidnightReset();
+            } else if (alarm.name === 'emailReport') {
+                await this.sendDailyReport();
+            }
+        } catch (error) {
+            console.error('Alarm handling error:', error);
+            // 에러 상황에 대한 적절한 처리 추가
         }
-      } catch (error) {
-        console.error('Alarm handling error:', error);
-      }
     });
   }
 
@@ -395,17 +415,21 @@ class WorkManager {
         현재시간: new Date().toISOString()
     });
 
-    const previousDate = new Date();
+    // 자정 시간 계산 (현재 날짜의 00:00:00)
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    
+    // 이전 날짜 계산
+    const previousDate = new Date(midnight);
     previousDate.setDate(previousDate.getDate() - 1);
     const dateStr = previousDate.toISOString().split('T')[0];
 
-    // 작업 중이었다면 이전 날짜 기록 저장
     if (this.state.isWorking) {
-        const midnight = new Date();
-        midnight.setHours(0, 0, 0, 0);
+        // 이전 날짜의 세션 시간 계산 (시작시간 ~ 자정)
+        const startTime = new Date(this.state.startTime);
+        const previousDaySession = Math.floor((midnight - startTime) / 1000);
         
-        const previousDaySession = Math.floor((midnight - new Date(this.state.startTime)) / 1000);
-        
+        // 이전 날짜 기록 저장
         const record = {
             date: dateStr,
             duration: previousDaySession,
@@ -415,27 +439,31 @@ class WorkManager {
         
         console.log('자정 리셋 시 저장되는 기록:', record);
         await StorageManager.saveWorkRecord(record);
+        
+        // 새로운 세션 시작
+        this.state = {
+            isWorking: true,  // 계속 작업 중
+            startTime: midnight.toISOString(),  // 00:00부터 시작
+            currentSession: 0,
+            totalToday: 0,
+            savedTotalToday: 0,
+            autoStopHours: this.state.autoStopHours
+        };
+    } else {
+        // 작업 중이 아닌 경우 완전 리셋
+        this.state = {
+            ...DefaultState,
+            autoStopHours: this.state.autoStopHours
+        };
     }
 
-    // 새로운 날짜의 세션 시작
-    const newStartTime = midnight.toISOString();
-    const currentTime = new Date();
-    const newSessionDuration = Math.floor((currentTime - midnight) / 1000);
-
-    this.state = {
-        ...this.state,
-        startTime: newStartTime,
-        currentSession: newSessionDuration,
-        savedTotalToday: newSessionDuration,  // 새로운 날의 누적 시간 시작
-        totalToday: newSessionDuration
-    };
-
-    console.log('자정 리셋 완료:', {
-        저장된날짜: dateStr,
-        새로운상태: this.state
-    });
-
+    // 상태 저장 확인
+    console.log('리셋된 상태:', this.state);
     await this.saveAndNotify();
+    
+    // 저장 후 상태 다시 확인
+    const saved = await StorageManager.getWorkStatus();
+    console.log('저장 후 상태:', saved);
   }
 
   async sendDailyReport() {

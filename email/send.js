@@ -71,6 +71,90 @@ async function calculateMonthlyTotal(baseDate) {
     }
 }
 
+async function calculateDailyTotal(date) {
+    try {
+        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+        const dateStr = date.toISOString().split('T')[0];
+        const dayRecords = workRecords[dateStr] || [];
+        
+        console.log('===== 일간 근무시간 계산 시작 =====');
+        console.log(`날짜: ${dateStr}`);
+        
+        // 유효한 기록만 필터링
+        const validRecords = dayRecords.filter(record => {
+            const start = new Date(record.startTime);
+            const end = new Date(record.endTime);
+            const duration = Math.floor((end - start) / 1000);
+            
+            return start < end && duration > 0 && duration < 24 * 60 * 60;
+        });
+        
+        // 시간순 정렬
+        validRecords.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+        
+        console.log('유효한 기록:', validRecords.length, '개');
+        
+        let totalSeconds = 0;
+        validRecords.forEach(record => {
+            const start = new Date(record.startTime);
+            const end = new Date(record.endTime);
+            const duration = Math.floor((end - start) / 1000);
+            
+            console.log('세션 상세:', {
+                시작: start.toLocaleTimeString(),
+                종료: end.toLocaleTimeString(),
+                시간: `${Math.floor(duration/3600)}시간 ${Math.floor((duration%3600)/60)}분`
+            });
+            
+            totalSeconds += duration;
+        });
+        
+        console.log('최종 계산 결과:', {
+            총_초: totalSeconds,
+            총_시간: `${Math.floor(totalSeconds/3600)}시간 ${Math.floor((totalSeconds%3600)/60)}분`
+        });
+        
+        return totalSeconds;
+    } catch (error) {
+        console.error('일간 합계 계산 실패:', error);
+        console.error('에러 상세:', error.stack);
+        return 0;
+    }
+}
+
+async function cleanupInvalidRecords() {
+    try {
+        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+        
+        // 유효한 기록만 필터링
+        const cleanedRecords = {};
+        
+        Object.entries(workRecords).forEach(([date, records]) => {
+            // 1970년 데이터 제외
+            if (date.startsWith('1970')) return;
+            
+            // 유효한 기록만 필터링
+            const validRecords = records.filter(record => {
+                return record.startTime && record.endTime && 
+                       record.duration > 0 && record.duration < 24 * 60 * 60; // 24시간 이내
+            });
+            
+            if (validRecords.length > 0) {
+                cleanedRecords[date] = validRecords;
+            }
+        });
+        
+        // 정리된 데이터 저장
+        await chrome.storage.local.set({ workRecords: cleanedRecords });
+        console.log('데이터 정리 완료:', cleanedRecords);
+        
+        return cleanedRecords;
+    } catch (error) {
+        console.error('데이터 정리 실패:', error);
+        return null;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const emailService = new EmailService();
@@ -91,7 +175,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 첫 출근, 마지막 퇴근 시간 계산
         let startTime = '기록 없음';
         let endTime = '기록 없음';
-        let totalSeconds = 0;
 
         if (yesterdayRecords.length > 0) {
             startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
@@ -102,8 +185,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 hour: '2-digit',
                 minute: '2-digit'
             });
-            totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
         }
+
+        // calculateDailyTotal 함수를 사용하여 정확한 시간 계산
+        const totalSeconds = await calculateDailyTotal(yesterday);
+        console.log('최종 계산된 근무 시간:', {
+            초: totalSeconds,
+            시간: (totalSeconds / 3600).toFixed(1)
+        });
 
         // 주간/월간 통계 계산
         const weekTotal = await calculateWeeklyTotal(yesterday);
