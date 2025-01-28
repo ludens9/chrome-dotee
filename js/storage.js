@@ -160,40 +160,79 @@ class StorageManager {
 
   static async saveWorkStatus(status) {
     try {
-      // 저장 전 상태 로깅
-      console.log('저장할 상태:', status);
-      
-      // 상태 저장
-      await chrome.storage.local.set({ workStatus: status });
-      
-      // 저장 후 확인
-      const saved = await chrome.storage.local.get('workStatus');
-      console.log('저장된 상태:', saved.workStatus);
-      
+      if (!this.isValidWorkStatus(status)) {
+        return;
+      }
+
+      // 단순화된 저장 로직
+      await chrome.storage.local.set({ 
+        workStatus: status,
+        workStatusBackup: {
+          status,
+          timestamp: Date.now()
+        }
+      });
+
+      // 저장 확인
+      const { workStatus } = await chrome.storage.local.get('workStatus');
+      if (!workStatus || !this.isValidWorkStatus(workStatus)) {
+        throw new Error('Status save verification failed');
+      }
+
     } catch (error) {
-      console.error('Failed to save work status:', error);
+      // 백업에서 복구 시도
+      const { workStatusBackup } = await chrome.storage.local.get('workStatusBackup');
+      if (workStatusBackup && workStatusBackup.status) {
+        await chrome.storage.local.set({ workStatus: workStatusBackup.status });
+      }
+      throw error;
     }
   }
 
   static async getWorkStatus() {
     try {
       const { workStatus } = await chrome.storage.local.get('workStatus');
-      return workStatus || {
-        isWorking: false,
-        startTime: null,
-        currentSession: 0,
-        totalToday: 0,
-        autoStopHours: 0
-      };
+      if (workStatus && this.isValidWorkStatus(workStatus)) {
+        return workStatus;
+      }
+      return await this.recoverWorkStatus();
     } catch (error) {
-      console.error('Failed to get work status:', error);
-      return {
-        isWorking: false,
-        startTime: null,
-        currentSession: 0,
-        totalToday: 0,
-        autoStopHours: 0
-      };
+      return this.getDefaultWorkStatus();
+    }
+  }
+
+  static isValidWorkStatus(status) {
+    return status && 
+           typeof status.isWorking === 'boolean' &&
+           (status.startTime === null || typeof status.startTime === 'string') &&
+           typeof status.currentSession === 'number' &&
+           typeof status.totalToday === 'number' &&
+           typeof status.savedTotalToday === 'number';
+  }
+
+  static getDefaultWorkStatus() {
+    return {
+      isWorking: false,
+      startTime: null,
+      currentSession: 0,
+      totalToday: 0,
+      savedTotalToday: 0,
+      autoStopHours: 0
+    };
+  }
+
+  static async recoverWorkStatus() {
+    try {
+      const { lastTransactionKey } = await chrome.storage.local.get('lastTransactionKey');
+      if (lastTransactionKey) {
+        const { [lastTransactionKey]: lastStatus } = await chrome.storage.local.get(lastTransactionKey);
+        if (lastStatus && this.isValidWorkStatus(lastStatus)) {
+          return lastStatus;
+        }
+      }
+      return this.getDefaultWorkStatus();
+    } catch (error) {
+      return this.getDefaultWorkStatus();
     }
   }
 
@@ -257,6 +296,81 @@ class StorageManager {
     } catch (error) {
       console.error('지난달 합계 계산 실패:', error);
       return 0;
+    }
+  }
+
+  static async acquireLock(key) {
+    const timestamp = Date.now();
+    const { lock } = await chrome.storage.local.get(key);
+    
+    if (lock && timestamp - lock.timestamp < 5000) {
+      return false;
+    }
+    
+    await chrome.storage.local.set({ [key]: { timestamp } });
+    return true;
+  }
+
+  static async releaseLock(key) {
+    await chrome.storage.local.remove(key);
+  }
+
+  static async createBackup(status) {
+    try {
+      const backupKey = `backup_${Date.now()}`;
+      await chrome.storage.local.set({
+        [backupKey]: {
+          status,
+          timestamp: Date.now()
+        },
+        currentBackupKey: backupKey
+      });
+    } catch (error) {
+      console.error('백업 생성 실패:', error);
+      throw error;
+    }
+  }
+
+  static async verifyBackup(status) {
+    try {
+      const { currentBackupKey } = await chrome.storage.local.get('currentBackupKey');
+      if (!currentBackupKey) return false;
+
+      const { [currentBackupKey]: backup } = await chrome.storage.local.get(currentBackupKey);
+      return backup && 
+             this.isValidWorkStatus(backup.status) &&
+             JSON.stringify(backup.status) === JSON.stringify(status);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  static async restoreFromBackup() {
+    try {
+      const { currentBackupKey } = await chrome.storage.local.get('currentBackupKey');
+      if (!currentBackupKey) throw new Error('No backup found');
+
+      const { [currentBackupKey]: backup } = await chrome.storage.local.get(currentBackupKey);
+      if (!backup || !this.isValidWorkStatus(backup.status)) {
+        throw new Error('Invalid backup data');
+      }
+
+      await chrome.storage.local.set({ workStatus: backup.status });
+      return backup.status;
+    } catch (error) {
+      console.error('백업 복구 실패:', error);
+      throw error;
+    }
+  }
+
+  static async clearBackup() {
+    try {
+      const { currentBackupKey } = await chrome.storage.local.get('currentBackupKey');
+      if (currentBackupKey) {
+        await chrome.storage.local.remove([currentBackupKey, 'currentBackupKey']);
+      }
+    } catch (error) {
+      console.error('백업 정리 실패:', error);
     }
   }
 } 
