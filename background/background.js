@@ -521,15 +521,6 @@ class WorkManager {
         console.error('이메일 발송 실패:', error);
     }
   }
-
-  setupKeepAlive() {
-    // 5분마다 keepalive 신호 보내기
-    setInterval(() => {
-      if (this.state.isWorking) {
-        chrome.runtime.getPlatformInfo(() => {});
-      }
-    }, 5 * 60 * 1000);
-  }
 }
 
 // 주간 합계 계산 함수
