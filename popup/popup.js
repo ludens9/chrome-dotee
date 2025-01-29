@@ -47,58 +47,13 @@ class PopupManager {
         this.sendEmailReport();
       }
     });
-
-    // 상태 업데이트 메시지 리스너
-    chrome.runtime.onMessage.addListener((message) => {
-      if (message.type === 'STATUS_UPDATED') {
-        this.updateTotalTime(message.data);
-      }
-    });
   }
 
   async requestInitialState() {
-    try {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
-        
-        // 저장된 상태 확인
-        const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
-        
-        // 새로운 날짜인 경우 초기화
-        if (status && status.startTime) {
-            const statusDate = new Date(status.startTime).toISOString().split('T')[0];
-            if (statusDate !== todayStr) {
-                await StorageManager.clearTodayData();
-                this.totalTodayEl.textContent = '0.0시간';
-                return;
-            }
-        }
-
-        // 오늘 날짜의 총 누적 시간을 계산
-        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-        const todayRecords = workRecords[todayStr] || [];
-        
-        // 유효한 기록만 필터링하여 총 시간 계산
-        const totalSeconds = todayRecords.reduce((sum, record) => {
-            if (!record.duration || record.duration < 0 || record.duration > 24 * 60 * 60) {
-                return sum;
-            }
-            return sum + record.duration;
-        }, 0);
-
-        // 현재 진행 중인 세션이 있다면 해당 시간도 포함
-        if (status && status.isWorking) {
-            this.totalTodayEl.textContent = `${((totalSeconds + (status.currentSession || 0)) / 3600).toFixed(1)}시간`;
-        } else {
-            this.totalTodayEl.textContent = `${(totalSeconds / 3600).toFixed(1)}시간`;
-        }
-
-        // 상태 업데이트
-        this.updateDisplay(status);
-    } catch (error) {
-        console.error('초기 상태 로드 실패:', error);
-        this.totalTodayEl.textContent = '0.0시간';
-    }
+    const response = await chrome.runtime.sendMessage({
+      type: 'GET_STATUS'
+    });
+    this.updateDisplay(response);
   }
 
   updateDisplay(state) {
@@ -106,10 +61,7 @@ class PopupManager {
 
     console.log('현재 상태:', state);
 
-    // 작업 상태 업데이트
     this.workToggle.checked = state.isWorking;
-    
-    // 현재 세션 시간 표시
     this.currentSessionEl.textContent = this.formatTime(state.currentSession || 0);
     
     // 근무 중일 때 자동종료 선택 비활성화
@@ -119,8 +71,10 @@ class PopupManager {
     const today = new Date();
     const dateStr = this.formatDate(today);
     this.dateDisplayEl.textContent = `${dateStr} 총누적시간`;
-
-    // 자동 종료 시간 설정
+    // 초 단위를 시간으로 변환 (버림 처리)
+    const totalMinutes = Math.floor((state.totalToday || 0) / 60);  // 전체 분
+    const totalHours = Math.floor(totalMinutes / 60) + (Math.floor(totalMinutes % 60) / 60);
+    this.totalTodayEl.textContent = `${totalHours.toFixed(1)}시간`;
     this.autoStopSelect.value = String(state.autoStopHours || 0);
   }
 
@@ -342,28 +296,6 @@ class PopupManager {
       console.log('이메일 발송 완료');
     } catch (error) {
       console.error('이메일 발송 실패:', error);
-    }
-  }
-
-  // 총 누적 시간 업데이트
-  async updateTotalTime(state) {
-    try {
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-      const todayRecords = workRecords[todayStr] || [];
-      
-      const totalSeconds = todayRecords.reduce((sum, record) => {
-        if (!record.duration || record.duration < 0 || record.duration > 24 * 60 * 60) {
-          return sum;
-        }
-        return sum + record.duration;
-      }, 0);
-
-      const currentSession = state.isWorking ? (state.currentSession || 0) : 0;
-      this.totalTodayEl.textContent = `${((totalSeconds + currentSession) / 3600).toFixed(1)}시간`;
-    } catch (error) {
-      console.error('총 시간 업데이트 실패:', error);
     }
   }
 }

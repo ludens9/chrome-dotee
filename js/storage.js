@@ -161,79 +161,40 @@ class StorageManager {
 
   static async saveWorkStatus(status) {
     try {
-      if (!this.isValidWorkStatus(status)) {
-        return;
-      }
-
-      // 단순화된 저장 로직
-      await chrome.storage.local.set({ 
-        workStatus: status,
-        workStatusBackup: {
-          status,
-          timestamp: Date.now()
-        }
-      });
-
-      // 저장 확인
-      const { workStatus } = await chrome.storage.local.get('workStatus');
-      if (!workStatus || !this.isValidWorkStatus(workStatus)) {
-        throw new Error('Status save verification failed');
-      }
-
+      // 저장 전 상태 로깅
+      console.log('저장할 상태:', status);
+      
+      // 상태 저장
+      await chrome.storage.local.set({ workStatus: status });
+      
+      // 저장 후 확인
+      const saved = await chrome.storage.local.get('workStatus');
+      console.log('저장된 상태:', saved.workStatus);
+      
     } catch (error) {
-      // 백업에서 복구 시도
-      const { workStatusBackup } = await chrome.storage.local.get('workStatusBackup');
-      if (workStatusBackup && workStatusBackup.status) {
-        await chrome.storage.local.set({ workStatus: workStatusBackup.status });
-      }
-      throw error;
+      console.error('Failed to save work status:', error);
     }
   }
 
   static async getWorkStatus() {
     try {
       const { workStatus } = await chrome.storage.local.get('workStatus');
-      if (workStatus && this.isValidWorkStatus(workStatus)) {
-        return workStatus;
-      }
-      return await this.recoverWorkStatus();
+      return workStatus || {
+        isWorking: false,
+        startTime: null,
+        currentSession: 0,
+        totalToday: 0,
+        autoStopHours: 0
+      };
     } catch (error) {
-      return this.getDefaultWorkStatus();
-    }
-  }
-
-  static isValidWorkStatus(status) {
-    return status && 
-           typeof status.isWorking === 'boolean' &&
-           (status.startTime === null || typeof status.startTime === 'string') &&
-           typeof status.currentSession === 'number' &&
-           typeof status.totalToday === 'number' &&
-           typeof status.savedTotalToday === 'number';
-  }
-
-  static getDefaultWorkStatus() {
-    return {
-      isWorking: false,
-      startTime: null,
-      currentSession: 0,
-      totalToday: 0,
-      savedTotalToday: 0,
-      autoStopHours: 0
-    };
-  }
-
-  static async recoverWorkStatus() {
-    try {
-      const { lastTransactionKey } = await chrome.storage.local.get('lastTransactionKey');
-      if (lastTransactionKey) {
-        const { [lastTransactionKey]: lastStatus } = await chrome.storage.local.get(lastTransactionKey);
-        if (lastStatus && this.isValidWorkStatus(lastStatus)) {
-          return lastStatus;
-        }
-      }
-      return this.getDefaultWorkStatus();
-    } catch (error) {
-      return this.getDefaultWorkStatus();
+      console.error('Failed to get work status:', error);
+      return {
+        isWorking: false,
+        startTime: null,
+        currentSession: 0,
+        totalToday: 0,
+        autoStopHours: 0
+      };
     }
   }
 
@@ -372,56 +333,6 @@ class StorageManager {
       }
     } catch (error) {
       console.error('백업 정리 실패:', error);
-    }
-  }
-
-  static async saveDailyTotal(date, total) {
-    try {
-      const { dailyTotals = {} } = await chrome.storage.local.get('dailyTotals');
-      dailyTotals[date] = total;
-      await chrome.storage.local.set({ dailyTotals });
-    } catch (error) {
-      console.error('일간 총계 저장 실패:', error);
-    }
-  }
-
-  static async getLastValidState() {
-    try {
-      const { stateBackups = [] } = await chrome.storage.local.get('stateBackups');
-      return stateBackups[stateBackups.length - 1]?.state || null;
-    } catch (error) {
-      console.error('마지막 유효 상태 조회 실패:', error);
-      return null;
-    }
-  }
-
-  static async saveErrorLog(error) {
-    try {
-      const { errorLogs = [] } = await chrome.storage.local.get('errorLogs');
-      errorLogs.push(error);
-      await chrome.storage.local.set({ errorLogs });
-    } catch (err) {
-      console.error('에러 로그 저장 실패:', err);
-    }
-  }
-
-  static async getDailyRecords(date) {
-    try {
-      const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-      return workRecords[date] || [];
-    } catch (error) {
-      console.error('일간 기록 조회 실패:', error);
-      return [];
-    }
-  }
-
-  static async saveProcessedRecords(date, records) {
-    try {
-      const { processedRecords = {} } = await chrome.storage.local.get('processedRecords');
-      processedRecords[date] = records;
-      await chrome.storage.local.set({ processedRecords });
-    } catch (error) {
-      console.error('처리된 기록 저장 실패:', error);
     }
   }
 } 
