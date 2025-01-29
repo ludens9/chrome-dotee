@@ -1,9 +1,9 @@
 class EmailService {
   constructor() {
     this.API_URL = 'https://api.emailjs.com/api/v1.0/email/send';
-    this.PUBLIC_KEY = 'Y-3LlcCV0nOOKq3cU';
-    this.SERVICE_ID = 'service_wf6t5so';
-    this.TEMPLATE_ID = 'template_vflcb3o';
+    this.PUBLIC_KEY = '5wn-prO2m11ltZdF7';
+    this.SERVICE_ID = 'service_ukqvpjc';
+    this.TEMPLATE_ID = 'template_ci84ax5';
     this.MAX_RETRIES = 3;
     this.RETRY_DELAY = 5000; // 5초
   }
@@ -84,5 +84,27 @@ class EmailService {
 
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async getDailyReport(date) {
+    try {
+      // 처리된 기록 사용
+      const { processedRecords = {} } = await chrome.storage.local.get('processedRecords');
+      const records = processedRecords[date] || [];
+
+      // 일간 총계 사용
+      const { dailyTotals = {} } = await chrome.storage.local.get('dailyTotals');
+      const totalHours = dailyTotals[date] || 0;
+
+      return {
+        date,
+        records,
+        totalHours: (totalHours / 3600).toFixed(1),
+        totalSessions: records.length
+      };
+    } catch (error) {
+      console.error('일간 리포트 생성 실패:', error);
+      throw error;
+    }
   }
 } 

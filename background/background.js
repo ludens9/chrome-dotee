@@ -2,7 +2,8 @@
 importScripts(
   '../js/messageUtil.js',  // messageUtil을 먼저 로드
   '../js/storage.js',
-  '../js/email.js'
+  '../js/email.js',
+  '../js/midnight.js'  // MidnightManager 클래스가 포함된 파일
 );
 
 // 상수 정의
@@ -125,9 +126,6 @@ class WorkManager {
       // 저장된 상태가 없을 때도 기본 아이콘으로 설정
       this.iconAnimator.resetToDefault();
     }
-    
-    // 초기화 시 알람 재설정 추가
-    await this.setupEmailAlarm();
   }
 
   setupMessageListeners() {
@@ -273,75 +271,68 @@ class WorkManager {
 
   async stopWork() {
     try {
-        if (!this.state.isWorking || !this.state.startTime) return;
+      if (!this.state.isWorking || !this.state.startTime) return;
 
-        const now = new Date();
-        const startTime = new Date(this.state.startTime);
-        const midnight = new Date(now);
-        midnight.setHours(0, 0, 0, 0);
+      const now = new Date();
+      const startTime = new Date(this.state.startTime);
+      const midnight = new Date(now);
+      midnight.setHours(0, 0, 0, 0);
 
-        // 시작 시간이 전날인 경우
-        if (startTime < midnight) {
-            // 자정까지의 세션 저장
-            const previousDate = new Date(midnight);
-            previousDate.setDate(previousDate.getDate() - 1);
-            const previousDateStr = previousDate.toISOString().split('T')[0];
-            
-            const previousSession = {
-                date: previousDateStr,
-                duration: Math.floor((midnight - startTime) / 1000),
-                startTime: this.state.startTime,
-                endTime: midnight.toISOString()
-            };
-            
-            await StorageManager.saveWorkRecord(previousSession);
-
-            // 자정부터 현재까지의 세션 저장
-            const currentSession = {
-                date: now.toISOString().split('T')[0],
-                duration: Math.floor((now - midnight) / 1000),
-                startTime: midnight.toISOString(),
-                endTime: now.toISOString()
-            };
-            
-            await StorageManager.saveWorkRecord(currentSession);
-        } else {
-            // 같은 날짜 내의 세션
-            const session = {
-                date: now.toISOString().split('T')[0],
-                duration: Math.floor((now - startTime) / 1000),
-                startTime: this.state.startTime,
-                endTime: now.toISOString()
-            };
-            
-            await StorageManager.saveWorkRecord(session);
-        }
-
-        // 상태 초기화 전 현재 누적시간 저장
-        const finalTotal = this.state.totalToday;
-
-        // 상태 초기화
-        this.state = {
-            isWorking: false,
-            startTime: null,
-            currentSession: 0,
-            totalToday: finalTotal,      // 누적시간 유지
-            savedTotalToday: finalTotal, // 누적시간을 savedTotalToday에도 유지
-            autoStopHours: this.state.autoStopHours
+      // 시작 시간이 전날인 경우
+      if (startTime < midnight) {
+        // 자정까지의 세션 저장
+        const previousDate = new Date(midnight);
+        previousDate.setDate(previousDate.getDate() - 1);
+        const previousDateStr = previousDate.toISOString().split('T')[0];
+        
+        const previousSession = {
+          date: previousDateStr,
+          duration: Math.floor((midnight - startTime) / 1000),
+          startTime: this.state.startTime,
+          endTime: midnight.toISOString()
         };
         
-        console.log('근무 종료 완료:', {
-            최종상태: {
-                ...this.state,
-                누적시간: this.formatTime(this.state.totalToday)
-            }
-        });
+        await StorageManager.saveWorkRecord(previousSession);
+
+        // 자정부터 현재까지의 세션 저장
+        const currentSession = {
+          date: now.toISOString().split('T')[0],
+          duration: Math.floor((now - midnight) / 1000),
+          startTime: midnight.toISOString(),
+          endTime: now.toISOString()
+        };
         
-        this.stopTimer();
-        this.iconAnimator.resetToDefault();
-        await this.saveAndNotify();
+        await StorageManager.saveWorkRecord(currentSession);
+      } else {
+        // 같은 날짜 내의 세션
+        const session = {
+          date: now.toISOString().split('T')[0],
+          duration: Math.floor((now - startTime) / 1000),
+          startTime: this.state.startTime,
+          endTime: now.toISOString()
+        };
+        
+        await StorageManager.saveWorkRecord(session);
+      }
+
+      // 상태 초기화 전 현재 누적시간 저장
+      const finalTotal = this.state.totalToday;
+
+      // 상태 초기화
+      this.state = {
+        isWorking: false,
+        startTime: null,
+        currentSession: 0,
+        totalToday: finalTotal,      // 누적시간 유지
+        savedTotalToday: finalTotal, // 누적시간을 savedTotalToday에도 유지
+        autoStopHours: this.state.autoStopHours
+      };
+
+      this.stopTimer();
+      this.iconAnimator.resetToDefault();
+      await this.saveAndNotify();
     } catch (error) {
-        console.error('근무 종료 실패:', error);
+      console.error('근무 종료 실패:', error);
     }
   }
 
@@ -395,11 +386,13 @@ class WorkManager {
 
   setupAutoStop() {
     const minutes = this.state.autoStopHours * 60;
+    
     console.log('Setting up auto stop alarm:', {
       hours: this.state.autoStopHours,
       minutes: minutes,
       scheduledTime: new Date(Date.now() + minutes * 60 * 1000)
     });
+    
     chrome.alarms.create('autoStop', {
       delayInMinutes: minutes
     });
@@ -465,21 +458,6 @@ class WorkManager {
             console.error('Alarm handling error:', error);
             // 에러 상황에 대한 적절한 처리 추가
         }
-    });
-  }
-
-  setupMidnightReset() {
-    // 다음 자정 시간 계산
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    
-    // 자정 알람 설정
-    const minutesUntilMidnight = Math.floor((tomorrow - now) / 1000 / 60);
-    chrome.alarms.create('midnight', {
-      delayInMinutes: minutesUntilMidnight,
-      periodInMinutes: 24 * 60  // 24시간마다 반복
     });
   }
 
@@ -584,6 +562,10 @@ class WorkManager {
       }
     }, 5 * 60 * 1000);
   }
+
+  async setupMidnightReset() {
+    // Implementation needed
+  }
 }
 
 // 주간 합계 계산 함수
@@ -647,4 +629,10 @@ self.addEventListener('activate', (event) => {
   console.log('Service Worker activated');
   // 활성화 시 알람 재설정
   event.waitUntil(workManager.setupEmailAlarm());
+});
+
+self.addEventListener('unload', () => {
+  if (workManager.midnightManager) {
+    workManager.midnightManager.destroy();
+  }
 }); 

@@ -51,6 +51,7 @@ class StorageManager {
         return;
       }
 
+      // 날짜는 시작 시간을 기준으로 결정
       const dateStr = startTime.toISOString().split('T')[0];
       const { workRecords = {} } = await chrome.storage.local.get('workRecords');
       
@@ -371,6 +372,56 @@ class StorageManager {
       }
     } catch (error) {
       console.error('백업 정리 실패:', error);
+    }
+  }
+
+  static async saveDailyTotal(date, total) {
+    try {
+      const { dailyTotals = {} } = await chrome.storage.local.get('dailyTotals');
+      dailyTotals[date] = total;
+      await chrome.storage.local.set({ dailyTotals });
+    } catch (error) {
+      console.error('일간 총계 저장 실패:', error);
+    }
+  }
+
+  static async getLastValidState() {
+    try {
+      const { stateBackups = [] } = await chrome.storage.local.get('stateBackups');
+      return stateBackups[stateBackups.length - 1]?.state || null;
+    } catch (error) {
+      console.error('마지막 유효 상태 조회 실패:', error);
+      return null;
+    }
+  }
+
+  static async saveErrorLog(error) {
+    try {
+      const { errorLogs = [] } = await chrome.storage.local.get('errorLogs');
+      errorLogs.push(error);
+      await chrome.storage.local.set({ errorLogs });
+    } catch (err) {
+      console.error('에러 로그 저장 실패:', err);
+    }
+  }
+
+  static async getDailyRecords(date) {
+    try {
+      const { workRecords = {} } = await chrome.storage.local.get('workRecords');
+      return workRecords[date] || [];
+    } catch (error) {
+      console.error('일간 기록 조회 실패:', error);
+      return [];
+    }
+  }
+
+  static async saveProcessedRecords(date, records) {
+    try {
+      const { processedRecords = {} } = await chrome.storage.local.get('processedRecords');
+      processedRecords[date] = records;
+      await chrome.storage.local.set({ processedRecords });
+    } catch (error) {
+      console.error('처리된 기록 저장 실패:', error);
     }
   }
 } 
