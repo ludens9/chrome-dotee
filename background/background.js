@@ -1,7 +1,8 @@
 // ES 모듈 import 제거
 importScripts(
   '../js/storage.js',
-  '../js/email.js'
+  '../js/email.js',
+  '../js/messageUtil.js'
 );
 
 // 상수 정의
@@ -253,66 +254,31 @@ class WorkManager {
       if (!this.state.isWorking || !this.state.startTime) return;
 
         const now = new Date();
-        const startTime = new Date(this.state.startTime);
-        const midnight = new Date(now);
-        midnight.setHours(0, 0, 0, 0);
-
-        // 시작 시간이 전날인 경우
-        if (startTime < midnight) {
-            // 자정까지의 세션 저장
-            const previousDate = new Date(midnight);
-            previousDate.setDate(previousDate.getDate() - 1);
-            const previousDateStr = previousDate.toISOString().split('T')[0];
-            
-            const previousSession = {
-                date: previousDateStr,
-                duration: Math.floor((midnight - startTime) / 1000),
-                startTime: this.state.startTime,
-                endTime: midnight.toISOString()
-            };
-            
-            await StorageManager.saveWorkRecord(previousSession);
-
-            // 자정부터 현재까지의 세션 저장
-            const currentSession = {
-                date: now.toISOString().split('T')[0],
-                duration: Math.floor((now - midnight) / 1000),
-                startTime: midnight.toISOString(),
-                endTime: now.toISOString()
-            };
-            
-            await StorageManager.saveWorkRecord(currentSession);
-        } else {
-            // 같은 날짜 내의 세션
-            const session = {
-                date: now.toISOString().split('T')[0],
-                duration: Math.floor((now - startTime) / 1000),
-                startTime: this.state.startTime,
-                endTime: now.toISOString()
-            };
-            
-            await StorageManager.saveWorkRecord(session);
-        }
-
-        // 상태 초기화 전 현재 누적시간 저장
-        const finalTotal = this.state.totalToday;
-
-        // 상태 초기화
-        this.state = {
-            isWorking: false,
-            startTime: null,
-            currentSession: 0,
-            totalToday: finalTotal,      // 누적시간 유지
-            savedTotalToday: finalTotal, // 누적시간을 savedTotalToday에도 유지
-            autoStopHours: this.state.autoStopHours
+        const endTime = now.toISOString();
+        const sessionDuration = this.state.currentSession;
+        
+        console.log('근무 종료:', {
+            시작: new Date(this.state.startTime).toLocaleString(),
+            종료: now.toLocaleString(),
+            시간: sessionDuration
+        });
+        
+        // 세션 기록 저장
+        const record = {
+            startTime: this.state.startTime,
+            endTime: endTime,
+            duration: sessionDuration,
+            date: new Date(this.state.startTime).toISOString().split('T')[0]
         };
         
-        console.log('근무 종료 완료:', {
-            최종상태: {
-                ...this.state,
-                누적시간: this.formatTime(this.state.totalToday)
-            }
-        });
+        await StorageManager.saveWorkRecord(record);
+        
+        // 상태 초기화
+        this.state = {
+            ...DefaultState,
+            totalToday: this.state.totalToday,
+            autoStopHours: this.state.autoStopHours
+        };
         
         this.stopTimer();
         this.iconAnimator.resetToDefault();
@@ -556,8 +522,13 @@ class WorkManager {
     }
   }
 
-  async setupMidnightReset() {
-    // Implementation needed
+  setupKeepAlive() {
+    // 5분마다 keepalive 신호 보내기
+    setInterval(() => {
+      if (this.state.isWorking) {
+        chrome.runtime.getPlatformInfo(() => {});
+      }
+    }, 5 * 60 * 1000);
   }
 }
 
@@ -620,6 +591,27 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   console.log('Service Worker activated');
-  // 활성화 시 알람 재설정
-  event.waitUntil(workManager.setupEmailAlarm());
-}); 
+});
+
+function getTimeBasedMessage(totalSeconds, hasRecord = true) {
+    if (!hasRecord) {
+        return `Had a good rest yesterday? Let's start fresh today! 😊
+어제 푹 쉬었으니 오늘은 상쾌하게 시작해볼까? 😊`;
+    }
+    
+    const hours = totalSeconds / 3600;
+    
+    if (hours < 4) {
+        return `Yesterday was a short day! Shall we pump up the energy today? 🌱
+어제는 짧게 일했네! 오늘은 좀 더 힘내볼까? 🌱`;
+    } else if (hours < 8) {
+        return `Nice job wrapping up yesterday! Let's make today another good one 🌟
+어제 하루 잘 마무리했어! 오늘도 좋은 하루 만들어보자 🌟`;
+    } else if (hours < 10) {
+        return `You worked hard yesterday! Take it easy today, okay? ✨
+어제 열심히 했으니 오늘은 적당히 쉬어가면서 하자 ✨`;
+    } else {
+        return `Wow, that was a long day yesterday! Remember to take breaks today 💪
+어제 진짜 많이 일했다! 오늘은 틈틈이 쉬면서 하자 💪`;
+    }
+} 

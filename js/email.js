@@ -4,8 +4,6 @@ class EmailService {
     this.PUBLIC_KEY = 'Y-3LlcCV0nOOKq3cU';
     this.SERVICE_ID = 'service_wf6t5so';
     this.TEMPLATE_ID = 'template_vflcb3o';
-    this.MAX_RETRIES = 3;
-    this.RETRY_DELAY = 5000; // 5초
   }
 
   async sendEmail(templateParams) {
@@ -42,32 +40,44 @@ class EmailService {
         throw new Error(errorData.error || `이메일 발송 실패: ${response.status}`);
       }
 
-      return true;
-    } catch (error) {
-      console.error('이메일 발송 오류:', error);
-      throw error;
+        return true;
+
+      } catch (error) {
+        retryCount++;
+        console.error(`이메일 발송 시도 ${retryCount}/${this.MAX_RETRIES} 실패:`, error);
+
+        if (retryCount === this.MAX_RETRIES) {
+          // 모든 재시도 실패 시 큐에 저장
+          await QueueManager.addToQueue('EMAIL', {
+            templateParams: processedParams,
+            timestamp: Date.now()
+          });
+          throw new Error('이메일 발송 실패. 오프라인 큐에 저장됨');
+        }
+
+        // 재시도 전 대기
+        await this.delay(this.RETRY_DELAY);
+      }
     }
   }
 
-  async getDailyReport(date) {
-    try {
-      // 처리된 기록 사용
-      const { processedRecords = {} } = await chrome.storage.local.get('processedRecords');
-      const records = processedRecords[date] || [];
+  async waitForOnline() {
+    return new Promise(resolve => {
+      if (navigator.onLine) {
+        resolve();
+        return;
+      }
 
-      // 일간 총계 사용
-      const { dailyTotals = {} } = await chrome.storage.local.get('dailyTotals');
-      const totalHours = dailyTotals[date] || 0;
-
-      return {
-        date,
-        records,
-        totalHours: (totalHours / 3600).toFixed(1),
-        totalSessions: records.length
+      const handleOnline = () => {
+        window.removeEventListener('online', handleOnline);
+        resolve();
       };
-    } catch (error) {
-      console.error('일간 리포트 생성 실패:', error);
-      throw error;
-    }
+
+      window.addEventListener('online', handleOnline);
+    });
+  }
+
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 } 
