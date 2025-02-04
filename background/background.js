@@ -1,8 +1,9 @@
-// ES 모듈 import 제거
-importScripts(
+// 필요한 스크립트들을 순서대로 로드
+self.importScripts(
   '../js/storage.js',
   '../js/email.js',
-  '../js/messageUtil.js'
+  '../js/messageUtil.js',
+  '../js/midnight.js'
 );
 
 // 상수 정의
@@ -102,77 +103,47 @@ class WorkManager {
     this.state = { ...DefaultState };
     this.timer = null;
     this.iconAnimator = new IconAnimator();
-    this.initialize();
-    this.setupMessageListeners();
-    this.setupAlarmListener();
-    this.setupMidnightReset();
-    this.setupEmailAlarm();
+    this.midnightManager = new MidnightManager(this);
   }
 
   async initialize() {
-    const saved = await StorageManager.getWorkStatus();
-    if (saved) {
-      this.state = { ...DefaultState, ...saved };
-      if (this.state.isWorking) {
-        this.startTimer();
-        this.iconAnimator.startAnimation();
-      } else {
-        // 근무 중이 아닐 때는 무조건 기본 아이콘으로 설정
-        this.iconAnimator.resetToDefault();
+    try {
+      const saved = await StorageManager.getWorkStatus();
+      if (saved) {
+        this.state = { ...DefaultState, ...saved };
+        if (this.state.isWorking) {
+          this.startTimer();
+          this.iconAnimator.startAnimation();
+        } else {
+          this.iconAnimator.resetToDefault();
+        }
       }
-    } else {
-      // 저장된 상태가 없을 때도 기본 아이콘으로 설정
-      this.iconAnimator.resetToDefault();
+      
+      // 자정 리셋 설정
+      await this.setupMidnightReset();
+      // 이메일 알람 설정
+      await this.setupEmailAlarm();
+      
+      console.log('WorkManager 초기화 완료:', this.state);
+    } catch (error) {
+      console.error('WorkManager 초기화 실패:', error);
+      throw error;
     }
   }
 
-  setupMessageListeners() {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        // 메시지 처리를 Promise로 래핑
-        const handleMessage = async () => {
-            try {
-                switch (message.type) {
-                    case Commands.START_WORK:
-                        await this.startWork(message.data);
-                        return { success: true };
-                    case Commands.STOP_WORK:
-                        await this.stopWork();
-                        return { success: true };
-                    case Commands.GET_STATUS:
-                        return this.state;
-                    case Commands.SET_AUTO_STOP:
-                        await this.setAutoStop(message.data);
-                        return { success: true };
-                    case 'SETUP_EMAIL_ALARM':
-                        await this.setupEmailAlarm();
-                        return { success: true };
-                    case 'TEST_EMAIL_REPORT':
-                        try {
-                            await chrome.tabs.create({
-                                url: chrome.runtime.getURL('email/send.html')
-                            });
-                            console.log('이메일 발송 페이지 열림');
-                            return { success: true };
-                        } catch (error) {
-                            console.error('이메일 발송 테스트 실패:', error);
-                            return { success: false, error: error.message };
-                        }
-                    case 'MIDNIGHT_RESET_TEST':
-                        await this.handleMidnightReset();
-                        return { success: true };
-                }
-            } catch (error) {
-                console.error('Message handling error:', error);
-                return { success: false, error: error.message };
-            }
-        };
-
-        // Promise 처리 및 응답 전송
-        handleMessage().then(response => {
-            sendResponse(response);
-        });
-
-        return true;  // 비동기 응답을 위해 반드시 필요
+  async setupMidnightReset() {
+    // 다음 자정까지의 시간 계산
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    
+    const msUntilMidnight = tomorrow - now;
+    
+    // 자정 알람 설정
+    await chrome.alarms.create('midnight', {
+      when: Date.now() + msUntilMidnight,
+      periodInMinutes: 24 * 60 // 24시간마다 반복
     });
   }
 
@@ -220,13 +191,12 @@ class WorkManager {
 
   async startWork(data = {}) {
     try {
-        // 현재 시간을 정확하게 가져옴
-        const now = new Date();
+        const now = new Date();  // 로컬 시간
         
         this.state = {
             ...this.state,
             isWorking: true,
-            startTime: now.toISOString(),  // ISO 문자열로 변환
+            startTime: now.getTime(),  // timestamp로 저장
             currentSession: 0,
             savedTotalToday: this.state.totalToday || 0,
             autoStopHours: data.autoStopHours !== null ? data.autoStopHours : (this.state.autoStopHours || 0)
@@ -251,11 +221,11 @@ class WorkManager {
 
   async stopWork() {
     try {
-      if (!this.state.isWorking || !this.state.startTime) return;
+        if (!this.state.isWorking || !this.state.startTime) return;
 
         const now = new Date();
-        const endTime = now.toISOString();
-        const sessionDuration = this.state.currentSession;
+        const endTime = now.getTime();  // timestamp로 저장
+        const sessionDuration = Math.floor((endTime - this.state.startTime) / 1000);  // 초 단위로 계산
         
         console.log('근무 종료:', {
             시작: new Date(this.state.startTime).toLocaleString(),
@@ -267,8 +237,7 @@ class WorkManager {
         const record = {
             startTime: this.state.startTime,
             endTime: endTime,
-            duration: sessionDuration,
-            date: new Date(this.state.startTime).toISOString().split('T')[0]
+            duration: sessionDuration
         };
         
         await StorageManager.saveWorkRecord(record);
@@ -284,7 +253,7 @@ class WorkManager {
         this.iconAnimator.resetToDefault();
         await this.saveAndNotify();
     } catch (error) {
-      console.error('근무 종료 실패:', error);
+        console.error('근무 종료 실패:', error);
     }
   }
 
@@ -379,23 +348,6 @@ class WorkManager {
     }
   }
 
-  setupAlarmListener() {
-    chrome.alarms.onAlarm.addListener(async (alarm) => {
-        try {
-            if (alarm.name === 'autoStop') {
-                await this.handleAutoStop();
-            } else if (alarm.name === 'midnight') {
-                await this.handleMidnightReset();
-            } else if (alarm.name === 'emailReport') {
-                await this.sendDailyReport();
-            }
-        } catch (error) {
-            console.error('Alarm handling error:', error);
-            // 에러 상황에 대한 적절한 처리 추가
-        }
-    });
-  }
-
   async handleMidnightReset() {
     console.log('자정 리셋 시작:', {
         현재상태: this.state,
@@ -455,70 +407,151 @@ class WorkManager {
 
   async sendDailyReport() {
     try {
-        const settings = await chrome.storage.local.get(['email', 'reportTime']);
-        if (!settings.email) return;
+      const settings = await chrome.storage.local.get(['email', 'reportTime']);
+      if (!settings.email) {
+        console.log('이메일 설정이 없음');
+        return;
+      }
 
-        // 어제 날짜 계산
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        
-        // 어제의 근무 기록 가져오기
-        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-        const yesterdayRecords = workRecords[yesterdayStr] || [];
+      // 어제 날짜 계산
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      
+      // 상세 로깅 추가
+      console.group('일일 리포트 생성 과정');
+      console.log('1. 날짜 정보:', {
+        어제날짜: yesterdayStr,
+        날짜객체: yesterday
+      });
 
-        // 근무 시간 계산
-        let startTime = '기록 없음';
-        let endTime = '기록 없음';
-        let totalSeconds = 0;
+      // 어제의 근무 기록 가져오기
+      const yesterdayRecords = await StorageManager.getWorkRecords(yesterdayStr);
+      console.log('2. 근무 기록 조회:', {
+        조회키: `workRecords_${yesterdayStr}`,
+        기록: yesterdayRecords,
+        기록수: yesterdayRecords?.length || 0
+      });
 
-        if (yesterdayRecords.length > 0) {
-            startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
-        }
+      // 기본값 설정
+      let emailData = {
+        to_email: settings.email,
+        date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
+        month: yesterday.getMonth() + 1,
+        last_month: yesterday.getMonth() || 12,
+        weekday: weekdays[yesterday.getDay()],
+        start_time: '기록 없음',
+        end_time: '기록 없음',
+        total_hours: '0.0',
+        total_sessions: 0,
+        week_hours: '0.0',
+        last_week_hours: '0.0',
+        month_hours: '0.0',
+        last_month_hours: '0.0',
+        message: getTimeBasedMessage(0, false),
+        has_record: false
+      };
 
-        // 주간/월간 통계 계산
-        const weekTotal = await calculateWeeklyTotal(yesterday);
-        const lastWeekTotal = await calculateWeeklyTotal(new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000));
-        const monthTotal = await calculateMonthlyTotal(yesterday);
-        const lastMonthTotal = await calculateMonthlyTotal(new Date(yesterday.getFullYear(), yesterday.getMonth() - 1, yesterday.getDate()));
-
-        // 메시지 생성 - getTimeBasedMessage 함수 사용
-        const timeBasedMessage = yesterdayRecords.length === 0 
-            ? getTimeBasedMessage(0, false)  // 근무 기록이 없는 경우
-            : getTimeBasedMessage(totalSeconds, true);  // 근무 기록이 있는 경우
-
-        // EmailService 인스턴스 생성
-        const emailService = new EmailService();
-
-        // 이메일 발송
-        await emailService.sendEmail({
-            to_email: settings.email,
-            date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
-            weekday: weekdays[yesterday.getDay()],
-            start_time: startTime,
-            end_time: endTime,
-            total_hours: (totalSeconds / 3600).toFixed(1),
-            week_hours: (weekTotal / 3600).toFixed(1),
-            last_week_hours: (lastWeekTotal / 3600).toFixed(1),
-            month_hours: (monthTotal / 3600).toFixed(1),
-            last_month_hours: (lastMonthTotal / 3600).toFixed(1),
-            message: timeBasedMessage,
-            has_notice: yesterdayRecords.length === 0,
-            notices: [],
-            week_status: `${weekdays[yesterday.getDay()]}일 기준`
+      // 근무 기록이 있는 경우 데이터 업데이트
+      if (yesterdayRecords && yesterdayRecords.length > 0) {
+        console.log('3. 근무 기록 처리:', {
+          첫기록: yesterdayRecords[0],
+          마지막기록: yesterdayRecords[yesterdayRecords.length - 1]
         });
 
-        console.log('이메일 발송 완료');
+        const totalSeconds = yesterdayRecords.reduce((total, record) => total + record.duration, 0);
+        
+        emailData = {
+          ...emailData,
+          start_time: new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          end_time: new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          total_hours: (totalSeconds / 3600).toFixed(1),
+          total_sessions: yesterdayRecords.length,
+          message: getTimeBasedMessage(totalSeconds, true),
+          has_record: true
+        };
+      }
+
+      // 주간/월간 통계 추가
+      const weekTotal = await StorageManager.getWeeklyTotal(yesterday);
+      const lastWeekTotal = await StorageManager.getLastWeekTotal(yesterday);
+      const monthTotal = await StorageManager.getMonthlyTotal(yesterday);
+      const lastMonthTotal = await StorageManager.getLastMonthTotal(yesterday);
+
+      console.log('4. 통계 정보:', {
+        주간: weekTotal / 3600,
+        지난주: lastWeekTotal / 3600,
+        월간: monthTotal / 3600,
+        지난달: lastMonthTotal / 3600
+      });
+
+      emailData = {
+        ...emailData,
+        week_hours: (weekTotal / 3600).toFixed(1),
+        last_week_hours: (lastWeekTotal / 3600).toFixed(1),
+        month_hours: (monthTotal / 3600).toFixed(1),
+        last_month_hours: (lastMonthTotal / 3600).toFixed(1)
+      };
+
+      console.log('5. 최종 이메일 데이터:', emailData);
+      console.groupEnd();
+
+      // 이메일 발송
+      const emailService = new EmailService();
+      await emailService.sendEmail(emailData);
+
+      console.log('일일 리포트 발송 완료');
     } catch (error) {
-        console.error('이메일 발송 실패:', error);
+      console.error('일일 리포트 발송 실패:', error);
+    }
+  }
+
+  async debugDailyReport() {
+    try {
+      console.group('일일 리포트 디버그');
+      
+      // 설정 확인
+      const settings = await chrome.storage.local.get(['email', 'reportTime']);
+      console.log('이메일 설정:', settings);
+
+      // 어제 날짜 계산
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      console.log('대상 날짜:', yesterdayStr);
+
+      // 근무 기록 조회
+      const records = await StorageManager.getWorkRecords(yesterdayStr);
+      console.log('근무 기록:', {
+        날짜: yesterdayStr,
+        기록수: records?.length || 0,
+        상세: records
+      });
+
+      // 통계 계산
+      const weekTotal = await StorageManager.getWeeklyTotal(yesterday);
+      const monthTotal = await StorageManager.getMonthlyTotal(yesterday);
+      console.log('통계:', {
+        주간: weekTotal / 3600,
+        월간: monthTotal / 3600
+      });
+
+      console.groupEnd();
+    } catch (error) {
+      console.error('디버그 실패:', error);
+    }
+  }
+
+  destroy() {
+    this.midnightManager.destroy();
+    if (this.timer) {
+      clearInterval(this.timer);
     }
   }
 }
@@ -573,15 +606,102 @@ async function calculateMonthlyTotal(baseDate) {
 }
 
 // Service Worker 초기화
-const workManager = new WorkManager();
+let workManager;
 
 // Service Worker 이벤트 리스너
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installed');
+  event.waitUntil(
+    Promise.resolve()
+      .then(() => {
+        console.log('Service Worker 설치 완료');
+      })
+  );
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated');
+  event.waitUntil(
+    Promise.resolve()
+      .then(async () => {
+        console.log('Service Worker 활성화 시작');
+        workManager = new WorkManager();
+        await workManager.initialize();
+        console.log('Service Worker 활성화 완료');
+      })
+  );
+});
+
+// 메시지 리스너 설정
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const handleMessage = async () => {
+    try {
+      if (!workManager) {
+        workManager = new WorkManager();
+        await workManager.initialize();
+      }
+
+      switch (message.type) {
+        case Commands.START_WORK:
+          await workManager.startWork(message.data);
+          return { success: true };
+        case Commands.STOP_WORK:
+          await workManager.stopWork();
+          return { success: true };
+        case Commands.GET_STATUS:
+          return workManager.state;
+        case Commands.SET_AUTO_STOP:
+          await workManager.setAutoStop(message.data);
+          return { success: true };
+        case 'SETUP_EMAIL_ALARM':
+          await workManager.setupEmailAlarm();
+          return { success: true };
+        case 'TEST_EMAIL_REPORT':
+          try {
+            await chrome.tabs.create({
+              url: chrome.runtime.getURL('email/send.html')
+            });
+            console.log('이메일 발송 페이지 열림');
+            return { success: true };
+          } catch (error) {
+            console.error('이메일 발송 테스트 실패:', error);
+            return { success: false, error: error.message };
+          }
+        case 'MIDNIGHT_RESET_TEST':
+          await workManager.handleMidnightReset();
+          return { success: true };
+      }
+    } catch (error) {
+      console.error('메시지 처리 실패:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // 비동기 응답 처리
+  handleMessage().then(sendResponse);
+  return true;
+});
+
+// 알람 리스너 설정
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  try {
+    if (!workManager) {
+      workManager = new WorkManager();
+      await workManager.initialize();
+    }
+
+    switch (alarm.name) {
+      case 'midnight':
+        await workManager.handleMidnightReset();
+        break;
+      case 'autoStop':
+        await workManager.handleAutoStop();
+        break;
+      case 'emailReport':
+        await workManager.sendDailyReport();
+        break;
+    }
+  } catch (error) {
+    console.error('알람 처리 실패:', error);
+  }
 });
 
 function getTimeBasedMessage(totalSeconds, hasRecord = true) {
@@ -605,4 +725,34 @@ function getTimeBasedMessage(totalSeconds, hasRecord = true) {
         return `Wow, that was a long day yesterday! Remember to take breaks today 💪
 어제 진짜 많이 일했다! 오늘은 틈틈이 쉬면서 하자 💪`;
     }
-} 
+}
+
+async function checkMidnight() {
+    const currentState = await StorageManager.getWorkStatus();
+    if (currentState.isWorking) {
+        const now = new Date();
+        if (now.getHours() === 0 && now.getMinutes() === 0) {
+            const prevWorkEnd = new Date(now);
+            prevWorkEnd.setSeconds(0);
+            prevWorkEnd.setMilliseconds(0);
+            
+            await StorageManager.saveWorkRecord({
+                startTime: currentState.startTime,
+                endTime: prevWorkEnd.getTime(),
+                duration: Math.floor((prevWorkEnd.getTime() - currentState.startTime) / 1000)
+            });
+
+            const newStartTime = new Date(now);
+            newStartTime.setSeconds(0);
+            newStartTime.setMilliseconds(0);
+            
+            await StorageManager.saveWorkStatus({
+                ...currentState,
+                startTime: newStartTime.getTime()
+            });
+        }
+    }
+}
+
+// 자정 체크를 위한 인터벌 추가
+setInterval(checkMidnight, 1000 * 60); // 1분마다 체크 

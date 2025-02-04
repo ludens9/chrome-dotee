@@ -16,7 +16,10 @@
   },
   "web_accessible_resources": [{
     "resources": [
-      "assets/icons/*.png"
+      "assets/icons/*.png",
+      "js/midnight.js",
+      "test/test.html",
+      "js/test.js"
     ],
     "matches": ["<all_urls>"]
   }],

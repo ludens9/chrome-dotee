@@ -155,85 +155,156 @@ async function cleanupInvalidRecords() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+// 데이터 계산 함수들
+async function calculateStats(baseDate) {
     try {
-        const emailService = new EmailService();
-        const settings = await chrome.storage.local.get(['email', 'reportTime']);
+        const dateStr = new Date(baseDate).toLocaleDateString();
+        const records = await StorageManager.getWorkRecords(dateStr);
+
+        // 시간 계산
+        const totalSeconds = records.reduce((total, record) => total + record.duration, 0);
+        const weekTotal = await StorageManager.getWeeklyTotal(baseDate);
+        const lastWeekTotal = await StorageManager.getWeeklyTotal(new Date(baseDate.getTime() - 7 * 24 * 60 * 60 * 1000));
+        const monthTotal = await StorageManager.getMonthlyTotal(baseDate);
+        const lastMonthTotal = await StorageManager.getMonthlyTotal(new Date(baseDate.getFullYear(), baseDate.getMonth() - 1, baseDate.getDate()));
+
+        // 시간 포맷팅
+        const times = {
+            startTime: '기록 없음',
+            endTime: '기록 없음'
+        };
+
+        if (records.length > 0) {
+            times.startTime = new Date(records[0].startTime).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            times.endTime = new Date(records[records.length - 1].endTime).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        return {
+            records,
+            times,
+            stats: {
+                totalSeconds,
+                totalHours: (totalSeconds / 3600).toFixed(1),
+                weekTotal: (weekTotal / 3600).toFixed(1),
+                lastWeekTotal: (lastWeekTotal / 3600).toFixed(1),
+                monthTotal: (monthTotal / 3600).toFixed(1),
+                lastMonthTotal: (lastMonthTotal / 3600).toFixed(1)
+            }
+        };
+    } catch (error) {
+        console.error('통계 계산 실패:', error);
+        throw error;
+    }
+}
+
+// 이메일 발송 함수
+async function sendDailyReport() {
+    try {
+        const settings = await chrome.storage.local.get(['email']);
         if (!settings.email) {
             throw new Error('이메일 설정이 없습니다.');
         }
 
-        // 어제 날짜 계산
-        const yesterday = new Date();
+        // 어제 날짜 계산 (로컬 시간 기준)
+        const now = new Date();
+        const yesterday = new Date(now);
         yesterday.setDate(yesterday.getDate() - 1);
-        
-        // 근무 기록 조회
-        const { workRecords = {} } = await chrome.storage.local.get('workRecords');
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const yesterdayRecords = workRecords[yesterdayStr] || [];
+        const yesterdayStr = yesterday.toLocaleDateString();
 
-        // 첫 출근, 마지막 퇴근 시간 계산
-        let startTime = '기록 없음';
-        let endTime = '기록 없음';
+        // 어제의 근무 기록 가져오기
+        const records = await StorageManager.getWorkRecords(yesterdayStr);
 
-        if (yesterdayRecords.length > 0) {
-            startTime = new Date(yesterdayRecords[0].startTime).toLocaleTimeString('ko-KR', {
+        // 시작 시간과 종료 시간 계산
+        let times = {
+            startTime: '기록 없음',
+            endTime: '기록 없음'
+        };
+
+        if (records && records.length > 0) {
+            times.startTime = new Date(records[0].startTime).toLocaleTimeString('ko-KR', {
                 hour: '2-digit',
                 minute: '2-digit'
             });
-            endTime = new Date(yesterdayRecords[yesterdayRecords.length - 1].endTime).toLocaleTimeString('ko-KR', {
+            times.endTime = new Date(records[records.length - 1].endTime).toLocaleTimeString('ko-KR', {
                 hour: '2-digit',
                 minute: '2-digit'
             });
         }
 
-        // calculateDailyTotal 함수를 사용하여 정확한 시간 계산
-        const totalSeconds = await calculateDailyTotal(yesterday);
-        console.log('최종 계산된 근무 시간:', {
-            초: totalSeconds,
-            시간: (totalSeconds / 3600).toFixed(1)
-        });
+        // 총 근무시간 계산 (초 단위)
+        const totalSeconds = records.reduce((total, record) => {
+            return total + record.duration;
+        }, 0);
 
-        // 주간/월간 통계 계산
-        const weekTotal = await calculateWeeklyTotal(yesterday);
-        const lastWeekTotal = await calculateWeeklyTotal(new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000));
-        const monthTotal = await calculateMonthlyTotal(yesterday);
-        const lastMonthTotal = await calculateMonthlyTotal(new Date(yesterday.getFullYear(), yesterday.getMonth() - 1, yesterday.getDate()));
-
-        // 요일 계산
-        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-        const weekday = weekdays[yesterday.getDay()];
-
-        document.getElementById('status').textContent = '이메일 발송 중...';
-
-        // 메시지 생성
-        const timeBasedMessage = yesterdayRecords.length === 0 
-            ? getTimeBasedMessage(0, false)  // 근무 기록이 없는 경우
-            : getTimeBasedMessage(totalSeconds, true);  // 근무 기록이 있는 경우
-
-        // 이메일 발송
-        await emailService.sendEmail({
+        const emailData = {
             to_email: settings.email,
             date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
-            weekday: weekday,
-            start_time: startTime,
-            end_time: endTime,
+            weekday: weekdays[yesterday.getDay()],
+            start_time: times.startTime,
+            end_time: times.endTime,
             total_hours: (totalSeconds / 3600).toFixed(1),
-            week_hours: (weekTotal / 3600).toFixed(1),
-            last_week_hours: (lastWeekTotal / 3600).toFixed(1),
-            month_hours: (monthTotal / 3600).toFixed(1),
-            last_month_hours: (lastMonthTotal / 3600).toFixed(1),
-            message: timeBasedMessage,
-            has_notice: yesterdayRecords.length === 0,
-            notices: [],
-            week_status: `${weekday}일 기준`,
-        });
+            total_sessions: records.length,
+            message: records.length === 0 
+                ? getTimeBasedMessage(0, false)
+                : getTimeBasedMessage(totalSeconds, true),
+            week_status: weekdays[yesterday.getDay()],
+            week_hours: (await calculateWeeklyTotal(yesterday) / 3600).toFixed(1),
+            last_week_hours: (await calculateWeeklyTotal(new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000)) / 3600).toFixed(1),
+            month_hours: (await calculateMonthlyTotal(yesterday) / 3600).toFixed(1),
+            last_month_hours: (await calculateMonthlyTotal(new Date(yesterday.getFullYear(), yesterday.getMonth() - 1, yesterday.getDate())) / 3600).toFixed(1)
+        };
 
-        document.getElementById('status').textContent = '이메일 발송 완료!';
-        setTimeout(() => window.close(), 3000);
-
+        await emailService.sendEmail(emailData);
+        return true;
     } catch (error) {
-        console.error('이메일 발송 실패:', error);
-        document.getElementById('status').textContent = '이메일 발송 실패: ' + error.message;
+        console.error('일일 리포트 발송 실패:', error);
+        throw error;
     }
-}); 
+}
+
+// 전역으로 내보내기
+window.sendDailyReport = sendDailyReport;
+
+async function sendWorkReport() {
+    const state = await StorageManager.getWorkStatus();
+    const now = new Date();
+    
+    // 현재 시간이 자정을 넘었다면 자정으로 종료 시간 설정
+    let endTime;
+    if (now.getHours() < new Date(state.startTime).getHours()) {
+        endTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    } else {
+        endTime = now;
+    }
+
+    const duration = endTime - new Date(state.startTime);
+    
+    const emailData = {
+        start_time: new Date(state.startTime).toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit'
+        }),
+        end_time: endTime.toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit'
+        }),
+        total_hours: (duration / (1000 * 60 * 60)).toFixed(1)
+    };
+
+    // ... send email logic ...
+}
+
+// 시간 포맷 함수
+function formatDuration(ms) {
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}시간 ${minutes}분`;
+}
+
+// ... existing code ... 

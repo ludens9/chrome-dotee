@@ -1,169 +1,140 @@
 <!-- 전체 컨테이너 -->
 <table width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td align="center" style="padding: 48px 0;">
-        <!-- 메인 콘텐츠 -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 24px; border: 1px solid #e5e7eb; max-width: 400px; margin-bottom: 16px;">
-          <tr>
-            <td>
-              <!-- 헤더 -->
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="padding: 32px 24px; text-align: center;">
-                    <div style="color: #6b7280; font-size: 15px; margin-bottom: 20px;">
-                      {{date}} ({{weekday}})의 근무기록
-                    </div>
-                    <div style="color: #111827; font-size: 24px; font-weight: 600; margin-bottom: 8px;">
-                      어제는 {{total_hours}}시간 근무했어요
-                    </div>
-                    <div style="color: #4b5563; font-size: 16px;">
-                      {{message}}
-                    </div>
-                  </td>
-                </tr>
-              </table>
-    
-              <!-- 출퇴근 시간 -->
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="padding: 0 24px;">
-                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px;">
-                      <tr>
-                        <td style="padding: 24px;">
-                          <table width="100%" cellpadding="0" cellspacing="0">
-                            <tr>
-                              <td width="50%" style="text-align: center;">
-                                <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">첫 출근</div>
-                                <div style="color: #111827; font-size: 18px;">{{start_time}}</div>
-                              </td>
-                              <td width="50%" style="text-align: center;">
-                                <div style="color: #6b7280; font-size: 14px; margin-bottom: 8px;">마지막 퇴근</div>
-                                <div style="color: #111827; font-size: 18px;">{{end_time}}</div>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-    
-              <!-- 주간/월간 근무 -->
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="padding: 24px;">
-                    <!-- 주간 근무 -->
-                    <div style="margin-bottom: 32px;">
-                      <div style="color: #111827; font-size: 16px; margin-bottom: 16px;">
-                        주간 근무 현황 <span style="color: #9ca3af;">({{week_status}})</span>
-                      </div>
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td width="49%">
-                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px;">
-                              <tr>
-                                <td style="padding: 16px; text-align: center;">
-                                  <div style="color: #6b7280; font-size: 14px; margin-bottom: 4px;">저번 주</div>
-                                  <div style="color: #111827; font-size: 20px;">{{last_week_hours}}h</div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                          <td width="2%"></td>
-                          <td width="49%">
-                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px;">
-                              <tr>
-                                <td style="padding: 16px; text-align: center;">
-                                  <div style="color: #6b7280; font-size: 14px; margin-bottom: 4px;">이번 주</div>
-                                  <div style="color: #2563eb; font-size: 20px; font-weight: 600;">{{week_hours}}h</div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
-    
-                    <!-- 월간 근무 -->
-                    <div>
-                      <div style="color: #111827; font-size: 16px; margin-bottom: 16px;">월간 근무 현황</div>
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td width="49%">
-                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px;">
-                              <tr>
-                                <td style="padding: 16px; text-align: center;">
-                                  <div style="color: #6b7280; font-size: 14px; margin-bottom: 4px;">저번 달</div>
-                                  <div style="color: #111827; font-size: 20px;">{{last_month_hours}}h</div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                          <td width="2%"></td>
-                          <td width="49%">
-                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 12px;">
-                              <tr>
-                                <td style="padding: 16px; text-align: center;">
-                                  <div style="color: #6b7280; font-size: 14px; margin-bottom: 4px;">이번 달</div>
-                                  <div style="color: #2563eb; font-size: 20px; font-weight: 600;">{{month_hours}}h</div>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
+  <tr>
+    <td align="center" style="padding: 24px 16px;">
+      <!-- 로고 -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin-bottom: 32px;">
+        <tr>
+          <td style="text-align: center;">
+            <img src="https://framerusercontent.com/images/8qvdAz6MATsu7ry6UhRrlKOUriQ.png" 
+                 alt="Dotee" 
+                 style="width: 200px; height: auto;">
+          </td>
+        </tr>
+      </table>
+
+      <!-- 타이틀과 메시지 -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin-bottom: 16px;">
+        <tr>
+          <td style="text-align: center;">
+            <div style="color: #111827; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.3;">
+              {{date}} {{weekday}}요일인 어제는<br>
+              {{total_hours}}시간 근무했어요
+            </div>
+            <div style="color: #4b5563; font-size: 17px; line-height: 1.5; letter-spacing: -0.3px; margin-top: 16px; margin-bottom: 24px;">
+              {{message}}
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- 메인 콘텐츠 -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #ffffff; border-radius: 24px; border: 1px solid #e5e7eb; margin-bottom: 16px;">
+        <tr>
+          <td style="padding: 32px 24px;">
+            <!-- 출퇴근 시간 -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 32px;">
+              <tr>
+                <td>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 16px;">
+                    <tr>
+                      <td style="padding: 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td width="50%" style="text-align: center; border-right: 1px solid #e5e7eb;">
+                              <div style="color: #6b7280; font-size: 15px; margin-bottom: 8px; letter-spacing: -0.2px;">첫 출근</div>
+                              <div style="color: #111827; font-size: 19px; font-weight: 600; letter-spacing: -0.3px;">{{start_time}}</div>
+                            </td>
+                            <td width="50%" style="text-align: center;">
+                              <div style="color: #6b7280; font-size: 15px; margin-bottom: 8px; letter-spacing: -0.2px;">마지막 퇴근</div>
+                              <div style="color: #111827; font-size: 19px; font-weight: 600; letter-spacing: -0.3px;">{{end_time}}</div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
   
-                    <!-- CTA 버튼 -->
-                    <div style="text-align: center; padding-top: 32px;">
-                      <a href="#" style="background-color: #2563eb; color: white; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-size: 16px; font-weight: 500; display: inline-block;">
-                        오늘 근무 시작하기
-                      </a>
-                    </div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
+            <!-- 총 세션 정보 -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 12px;">
+              <tr>
+                <td>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 16px;">
+                    <tr>
+                      <td style="padding: 20px; text-align: center;">
+                        <div style="color: #6b7280; font-size: 15px; margin-bottom: 8px; letter-spacing: -0.2px;">총 세션</div>
+                        <div style="color: #111827; font-size: 19px; font-weight: 600; letter-spacing: -0.3px;">{{total_sessions}}회</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
   
-        <!-- 프로모션 박스 -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border-radius: 24px; border: 1px solid #e5e7eb; max-width: 400px;">
-          <tr>
-            <td style="padding: 24px;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="text-align: center;">
-                    <!-- 로고 -->
-                    <img src="https://framerusercontent.com/images/8soTqGYBHeSLN32uA80oNWPco4c.png" 
-                         alt="Dotee" 
-                         style="width: 80px; height: auto; margin-bottom: 16px;">
-                    
-                    <div style="color: #111827; font-size: 18px; font-weight: 600; margin-bottom: 8px;">
-                      도티 앱으로 더 편하게
-                    </div>
-                    <div style="color: #6b7280; font-size: 15px; margin-bottom: 20px;">
-                      언제 어디서나 근무를 시작하고 기록할 수 있어요
-                    </div>
-                    <a href="#" style="background-color: #2563eb; color: white; padding: 12px 24px; border-radius: 12px; text-decoration: none; font-size: 15px; display: inline-block;">
-                      앱 다운로드
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-  
-        <!-- 푸터 -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 400px;">
-          <tr>
-            <td style="text-align: center; padding-top: 16px;">
-              <div style="color: #9ca3af; font-size: 13px;">본 메일은 자동으로 발송되었습니다.</div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
+            <!-- 주간/월간 근무 -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 40px;">
+              <tr>
+                <td>
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding: 24px; background-color: #f8fafc; border-radius: 16px;">
+                        <div style="color: #6b7280; font-size: 15px; margin-bottom: 16px;">근무 통계 <span style="color: #9ca3af; font-size: 14px;">(어제까지 누적)</span></div>
+                        <div style="color: #111827; font-size: 15px; line-height: 2;">
+                          이번주 근무현황 {{week_hours}}h<br>
+                          저번주 총 근무현황 {{last_week_hours}}h<br>
+                          {{month}}월 근무현황 {{month_hours}}h<br>
+                          {{last_month}}월 총 근무현황 {{last_month_hours}}h
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- CTA 버튼 -->
+            <div style="text-align: center; padding-top: 40px;">
+              <a href="#" style="background-color: #2563eb; color: white; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-size: 17px; font-weight: 600; display: inline-block; letter-spacing: -0.3px;">
+                오늘 근무 시작하기
+              </a>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- 프로모션 박스 -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #f8fafc; border-radius: 24px; border: 1px solid #e5e7eb; margin-bottom: 16px;">
+        <tr>
+          <td style="padding: 32px 24px; text-align: center;">
+            <!-- 로고 -->
+            <img src="https://framerusercontent.com/images/Ik9DkUTWB2sp6yKdgQbWWQnTDw8.png" 
+                 alt="Dotee" 
+                 style="width: 140px; height: auto; margin-bottom: 24px;">
+                  
+            <div style="color: #111827; font-size: 20px; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.3px;">
+              도티 앱으로 더 편하게
+            </div>
+            <div style="color: #6b7280; font-size: 16px; line-height: 1.6; margin-bottom: 24px; letter-spacing: -0.2px;">
+              언제 어디서나 근무를 시작하고<br>기록할 수 있어요
+            </div>
+            <a href="#" style="background-color: #2563eb; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-size: 16px; font-weight: 600; display: inline-block; letter-spacing: -0.2px;">
+              앱 다운로드
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      <!-- 푸터 -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px;">
+        <tr>
+          <td style="text-align: center; padding: 16px 0;">
+            <div style="color: #9ca3af; font-size: 14px; letter-spacing: -0.2px;">본 메일은 자동으로 발송되었습니다.</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
