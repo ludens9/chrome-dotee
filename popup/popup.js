@@ -50,10 +50,25 @@ class PopupManager {
   }
 
   async requestInitialState() {
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_STATUS'
-    });
-    this.updateDisplay(response);
+    try {
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'GET_STATUS'
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(response);
+          }
+        });
+      });
+      
+      if (response) {
+        this.updateDisplay(response);
+      }
+    } catch (error) {
+      console.error('상태 요청 실패:', error);
+    }
   }
 
   updateDisplay(state) {
@@ -81,10 +96,15 @@ class PopupManager {
   handleWorkToggle(event) {
     const command = event.target.checked ? 'START_WORK' : 'STOP_WORK';
     console.log('작업 상태 변경:', command);
+    
     chrome.runtime.sendMessage({
       type: command,
       data: {
         autoStopHours: null
+      }
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('작업 상태 변경 실패:', chrome.runtime.lastError);
       }
     });
   }
