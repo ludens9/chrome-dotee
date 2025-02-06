@@ -103,25 +103,124 @@ timeStr = new Date().toLocaleTimeString('ko-KR', {
    - 기존: 'YYYY-MM-DD' 형식만 지원
    - 변경: 'YYYY-MM-DD'와 'YYYY. M. D.' 두 가지 형식 모두 지원
    ```javascript
-   // 예시
-   workRecords_2025-02-03  // ISO 형식
-   workRecords_2025. 2. 3. // 로컬 형식
+   // 예시: 2월 4일(일) 기준
+   이번주: 1월 29일(월) ~ 2월 4일(일)
+   지난주: 1월 22일(월) ~ 1월 28일(일)
    ```
 
-2. 주간/월간 통계 계산 로직 개선
-   - 전체 데이터를 직접 조회하여 계산하도록 변경
-   - 날짜 범위 계산 시 시작 시간을 00:00:00으로 통일
-   - 기록의 startTime을 기준으로 날짜 범위 체크
+## 개선사항
+1. 로깅 시스템 강화
+   - 날짜 범위 계산 과정 상세 로깅
+   - 일별 집계 정보에 요일 추가
+   - 에러 발생 시 더 자세한 정보 기록
 
-## 주요 변경사항
-1. StorageManager.getWorkRecords
-   - 다양한 날짜 형식 지원을 위한 키 검색 로직 추가
-   - 로깅 개선으로 디버깅 용이성 향상
+2. 데이터 저장 구조 개선
+   - 일관된 키 형식 사용으로 데이터 정합성 향상
+   - 불필요한 키 변환 과정 제거
 
-2. StorageManager.getWeeklyTotal / getMonthlyTotal
-   - 데이터 조회 방식 변경 (개별 조회 → 전체 조회 후 필터링)
-   - 날짜 비교 로직 개선
+## 디버그 가이드
 
-## 디버깅
-- 상세 로깅 추가로 문제 발생 시 원인 파악 용이
-- 각 단계별 데이터 처리 현황 확인 가능
+### 콘솔에서 근무기록 조회하기
+
+1. **전체 데이터 조회**
+```javascript
+await StorageManager.debugStorage()
+```
+
+2. **특정 날짜 기록 조회**
+```javascript
+// 오늘 기록
+const today = new Date().toISOString().split('T')[0];
+const todayRecords = await StorageManager.getWorkRecords(today);
+console.log('오늘 기록:', {
+  날짜: today,
+  기록수: todayRecords.length,
+  세부기록: todayRecords.map(r => ({
+    시작: new Date(r.startTime).toLocaleString(),
+    종료: new Date(r.endTime).toLocaleString(),
+    시간: (r.duration / 3600).toFixed(1) + '시간'
+  }))
+});
+
+// 특정 날짜 기록 (YYYY-MM-DD 형식)
+const date = '2024-02-20';
+const records = await StorageManager.getWorkRecords(date);
+console.log('근무 기록:', {
+  날짜: date,
+  기록수: records.length,
+  세부기록: records.map(r => ({
+    시작: new Date(r.startTime).toLocaleString(),
+    종료: new Date(r.endTime).toLocaleString(),
+    시간: (r.duration / 3600).toFixed(1) + '시간'
+  }))
+});
+```
+
+3. **주간 통계 조회**
+```javascript
+// 이번주 통계
+const weekTotal = await StorageManager.getWeeklyTotal(new Date());
+console.log('이번주 총 근무시간:', (weekTotal / 3600).toFixed(1) + '시간');
+
+// 지난주 통계
+const lastWeekTotal = await StorageManager.getLastWeekTotal(new Date());
+console.log('지난주 총 근무시간:', (lastWeekTotal / 3600).toFixed(1) + '시간');
+```
+
+4. **월간 통계 조회**
+```javascript
+// 이번달 통계
+const monthTotal = await StorageManager.getMonthlyTotal(new Date());
+console.log('이번달 총 근무시간:', (monthTotal / 3600).toFixed(1) + '시간');
+
+// 지난달 통계
+const lastMonthTotal = await StorageManager.getLastMonthTotal(new Date());
+console.log('지난달 총 근무시간:', (lastMonthTotal / 3600).toFixed(1) + '시간');
+```
+
+5. **데이터 초기화**
+```javascript
+// 전체 데이터 초기화
+await StorageManager.clearAllData();
+
+// 오늘 데이터만 초기화
+await StorageManager.clearTodayData();
+```
+
+### 주의사항
+- 콘솔 명령어는 크롬 확장프로그램의 팝업 창이나 백그라운드 페이지의 개발자 도구에서 실행해야 합니다.
+- 날짜 형식은 반드시 'YYYY-MM-DD' 형식을 사용해야 합니다.
+- 시간은 초 단위로 저장되며, 시간 단위로 변환하려면 3600으로 나누어야 합니다.
+
+# 변경사항 (2024-02-06)
+
+## 버그 수정
+1. 비정상적인 누적 시간 계산 문제 해결
+   - 자정 처리 시 누적 시간 초기화 로직 개선
+   - 새로운 세션 시작 시 이전 누적 시간 정확히 계산
+   ```javascript
+   // 예시: 오후 2시 시작 → 현재 오후 3시
+   현재세션: 1시간
+   오늘누적: 1시간
+   ```
+
+2. 시작 시간 유효성 검사 추가
+   - 유효하지 않은 시작 시간 자동 감지 및 보정
+   - 미래 시간으로 설정된 경우 현재 시간으로 조정
+   - 이전 날짜의 시작 시간인 경우 자동 초기화
+
+3. 날짜 변경 감지 및 처리 개선
+   - 실시간 날짜 변경 감지
+   - 자정 시점에 정확한 세션 분할
+   - 새로운 날짜에서 누적 시간 초기화
+
+## 개선사항
+1. 상태 관리 강화
+   - 기본 상태 정의 및 일관된 초기화
+   - 상태 변경 시 유효성 검사 추가
+   - 비정상 상태 자동 복구 기능
+
+2. 로깅 시스템 개선
+   - 시간 계산 과정 상세 로깅
+   - 상태 변경 시점 명확히 기록
+   - 오류 발생 시 상세 정보 제공
