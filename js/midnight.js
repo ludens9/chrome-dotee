@@ -40,23 +40,24 @@ class MidnightManager {
 
       await StorageManager.saveWorkRecord(session);
 
-      // 2. 새로운 날짜로 즉시 시작
-      const newSession = {
+      // 2. 새로운 날짜로 즉시 시작 (모든 누적 시간 초기화)
+      const newState = {
         isWorking: true,
         startTime: midnight.getTime(),
-        currentSession: 0,
-        totalToday: 0,
-        savedTotalToday: 0,
+        currentSession: Math.floor((now - midnight) / 1000),
+        totalToday: Math.floor((now - midnight) / 1000),  // 자정 이후 시간만 계산
+        savedTotalToday: 0,  // 새로운 날짜이므로 0으로 초기화
         autoStopHours: state.autoStopHours
       };
 
       // 상태 업데이트
-      this.workManager.state = newSession;
-      await StorageManager.saveWorkStatus(newSession);
+      this.workManager.state = newState;
+      await StorageManager.saveWorkStatus(newState);
 
       console.log('자정 전환 완료:', {
         이전세션: session,
-        새세션: newSession
+        새세션: newState,
+        자정이후시간: Math.floor((now - midnight) / 1000)
       });
 
     } catch (error) {

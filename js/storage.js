@@ -196,22 +196,46 @@ class StorageManager {
   static async getWorkStatus() {
     try {
       const { workStatus } = await chrome.storage.local.get('workStatus');
-      return workStatus || {
+      
+      // 기본 상태
+      const defaultState = {
         isWorking: false,
         startTime: null,
         currentSession: 0,
         totalToday: 0,
-        autoStopHours: 2  // 기본값을 2시간으로 설정
+        savedTotalToday: 0,
+        autoStopHours: 2
       };
-    } catch (error) {
-      console.error('Failed to get work status:', error);
+
+      // 저장된 상태가 없으면 기본값 반환
+      if (!workStatus) {
+        return defaultState;
+      }
+
+      // 저장된 상태가 있으면 날짜 확인
+      const now = new Date();
+      const today = now.toDateString();
+      const savedDate = workStatus.startTime ? new Date(workStatus.startTime).toDateString() : null;
+
+      // 날짜가 다르거나 유효하지 않은 시작 시간이면 초기화된 상태 반환
+      if (!savedDate || savedDate !== today || workStatus.startTime < 0) {
+        return {
+          ...defaultState,
+          autoStopHours: workStatus.autoStopHours || 2
+        };
+      }
+
+      // 유효한 상태 반환
       return {
-        isWorking: false,
-        startTime: null,
-        currentSession: 0,
-        totalToday: 0,
-        autoStopHours: 2  // 기본값을 2시간으로 설정
+        ...defaultState,
+        ...workStatus,
+        // 시작 시간이 현재보다 미래면 현재 시간으로 보정
+        startTime: workStatus.startTime > now.getTime() ? now.getTime() : workStatus.startTime
       };
+
+    } catch (error) {
+      console.error('작업 상태 조회 실패:', error);
+      return defaultState;
     }
   }
 
