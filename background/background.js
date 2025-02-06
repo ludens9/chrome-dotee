@@ -111,41 +111,19 @@ class WorkManager {
       const now = new Date();
       const today = now.toDateString();
       const saved = await StorageManager.getWorkStatus();
-      
-      // 상태 초기화
-      this.state = saved;
-      
-      // 작업 중이면 타이머 시작
-      if (this.state.isWorking && this.state.startTime) {
-        // 시작 시간 유효성 검사
-        const now = new Date();
-        const startTime = new Date(this.state.startTime);
-        
-        if (startTime > now || startTime.toDateString() !== now.toDateString()) {
-          // 유효하지 않은 시작 시간이면 작업 중지
-          this.state = {
-            ...this.state,
-            isWorking: false,
-            startTime: null,
-            currentSession: 0,
-            totalToday: 0,
-            savedTotalToday: 0
-          };
-          await this.saveAndNotify();
-        } else {
+      if (saved) {
+        this.state = { ...DefaultState, ...saved };
+        if (this.state.isWorking) {
           this.startTimer();
           this.iconAnimator.startAnimation();
+        } else {
+          this.iconAnimator.resetToDefault();
         }
-      } else {
-        this.iconAnimator.resetToDefault();
       }
       
       await this.saveAndNotify();
       
-      console.log('WorkManager 초기화 완료:', {
-        현재시간: new Date().toLocaleString(),
-        상태: this.state
-      });
+      console.log('WorkManager 초기화 완료:', this.state);
     } catch (error) {
       console.error('WorkManager 초기화 실패:', error);
       throw error;
@@ -219,8 +197,7 @@ class WorkManager {
             isWorking: true,
             startTime: now.getTime(),  // timestamp로 저장
             currentSession: 0,
-            savedTotalToday: savedTotalToday,
-            totalToday: savedTotalToday,  // 초기 totalToday는 savedTotalToday와 동일
+            savedTotalToday: this.state.totalToday || 0,
             autoStopHours: data.autoStopHours !== null ? data.autoStopHours : (this.state.autoStopHours || 0)
         };
         

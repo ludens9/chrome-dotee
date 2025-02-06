@@ -196,36 +196,15 @@ class StorageManager {
   static async getWorkStatus() {
     try {
       const { workStatus } = await chrome.storage.local.get('workStatus');
-      
-      // 기본 상태
-      const defaultState = {
+      return workStatus || {
         isWorking: false,
         startTime: null,
         currentSession: 0,
         totalToday: 0,
-        savedTotalToday: 0,
-        autoStopHours: 2
+        autoStopHours: 2  // 기본값을 2시간으로 설정
       };
-
-      // 저장된 상태가 없으면 기본값 반환
-      if (!workStatus) {
-        return defaultState;
-      }
-
-      // 저장된 상태가 있으면 날짜 확인
-      const now = new Date();
-      const today = now.toDateString();
-      const savedDate = workStatus.startTime ? new Date(workStatus.startTime).toDateString() : null;
-
-      // 날짜가 다르거나 유효하지 않은 시작 시간이면 초기화된 상태 반환
-      if (!savedDate || savedDate !== today || workStatus.startTime < 0) {
-        return {
-          ...defaultState,
-          autoStopHours: workStatus.autoStopHours || 2
-        };
-      }
-
-      // 유효한 상태 반환
+    } catch (error) {
+      console.error('Failed to get work status:', error);
       return {
         isWorking: false,
         startTime: null,

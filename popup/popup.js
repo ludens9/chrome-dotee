@@ -47,10 +47,6 @@ class PopupManager {
 
   async requestInitialState() {
     try {
-      // 현재 날짜 가져오기
-      const today = new Date().toDateString();
-      
-      // 저장된 상태 가져오기
       const response = await new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({
           type: 'GET_STATUS'
@@ -64,22 +60,7 @@ class PopupManager {
       });
       
       if (response) {
-        // 저장된 상태의 날짜 확인
-        const savedDate = response.startTime ? new Date(response.startTime).toDateString() : null;
-        
-        // 날짜가 다르면 초기화된 상태 사용
-        if (savedDate !== today) {
-          this.updateDisplay({
-            isWorking: false,
-            startTime: null,
-            currentSession: 0,
-            totalToday: 0,
-            savedTotalToday: 0,
-            autoStopHours: response.autoStopHours || 2
-          });
-        } else {
-          this.updateDisplay(response);
-        }
+        this.updateDisplay(response);
       }
     } catch (error) {
       console.error('초기 상태 요청 실패:', error);
