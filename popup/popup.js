@@ -63,7 +63,7 @@ class PopupManager {
         this.updateDisplay(response);
       }
     } catch (error) {
-      console.error('초기 상태 요청 실패:', error);
+      console.error('상태 요청 실패:', error);
     }
   }
 
@@ -73,8 +73,49 @@ class PopupManager {
 
     this.workToggle.checked = state.isWorking;
     this.currentSessionEl.textContent = this.formatTime(state.currentSession || 0);
-    this.dateDisplayEl.textContent = `${this.formatDate(new Date())} 총누적시간`;
-    this.totalTodayEl.textContent = `${((state.totalToday || 0) / 3600).toFixed(1)}시간`;
+    
+    // 근무 중일 때 자동종료 선택 비활성화
+    this.autoStopSelect.disabled = state.isWorking;
+    
+    // 날짜 표시 업데이트
+    const today = new Date();
+    const dateStr = this.formatDate(today);
+    this.dateDisplayEl.textContent = `${dateStr} 총누적시간`;
+    // 초 단위를 시간으로 변환 (버림 처리)
+    const totalMinutes = Math.floor((state.totalToday || 0) / 60);  // 전체 분
+    const totalHours = Math.floor(totalMinutes / 60) + (Math.floor(totalMinutes % 60) / 60);
+    this.totalTodayEl.textContent = `${totalHours.toFixed(1)}시간`;
+    this.autoStopSelect.value = String(state.autoStopHours || 0);
+  }
+
+  handleWorkToggle(event) {
+    const command = event.target.checked ? 'START_WORK' : 'STOP_WORK';
+    console.log('작업 상태 변경:', command);
+    
+    chrome.runtime.sendMessage({
+      type: command,
+      data: {
+        autoStopHours: null
+      }
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('작업 상태 변경 실패:', chrome.runtime.lastError);
+      }
+    });
+  }
+
+  handleAutoStopChange(event) {
+    // 문자열을 숫자로 변환 (parseFloat로 변경하여 소수점 처리)
+    const value = parseFloat(event.target.value);
+    console.log('Auto stop value:', {
+      raw: event.target.value,
+      parsed: value
+    });
+    
+    chrome.runtime.sendMessage({
+      type: 'SET_AUTO_STOP',
+      data: value  // parseFloat 값 사용
+    });
   }
 
   formatTime(seconds) {

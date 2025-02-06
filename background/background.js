@@ -28,7 +28,7 @@ const DefaultState = {
   currentSession: 0,
   totalToday: 0,
   savedTotalToday: 0,
-  autoStopHours: 2
+  autoStopHours: 0
 };
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
@@ -344,62 +344,60 @@ class WorkManager {
   }
 
   async handleMidnightReset() {
-    try {
-        console.log('자정 리셋 시작:', {
-            현재상태: this.state,
-            현재시간: new Date().toISOString()
-        });
+    console.log('자정 리셋 시작:', {
+        현재상태: this.state,
+        현재시간: new Date().toISOString()
+    });
 
-        if (!this.state.isWorking) return;
+    // 자정 시간 계산 (현재 날짜의 00:00:00)
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    
+    // 이전 날짜 계산
+    const previousDate = new Date(midnight);
+    previousDate.setDate(previousDate.getDate() - 1);
+    const dateStr = previousDate.toISOString().split('T')[0];
 
-        const now = new Date();
+    if (this.state.isWorking) {
+        // 이전 날짜의 세션 시간 계산 (시작시간 ~ 자정)
         const startTime = new Date(this.state.startTime);
+        const previousDaySession = Math.floor((midnight - startTime) / 1000);
         
-        // 현재 시간이 자정인지, 그리고 시작 시간이 이전 날짜인지 확인
-        if (now.getHours() === 0 && now.getMinutes() === 0 && 
-            startTime.getDate() !== now.getDate()) {
-            
-            console.log('자정 세션 분할 시작:', {
-                현재시간: now.toLocaleString(),
-                시작시간: startTime.toLocaleString()
-            });
-
-            // 자정 시간 계산
-            const midnight = new Date(now);
-            midnight.setHours(0, 0, 0, 0);
-
-            // 1. 이전 날짜의 세션 저장 (시작시간 ~ 자정)
-            const prevDayDuration = Math.floor((midnight - startTime) / 1000);
-            const prevDayRecord = {
-                startTime: startTime.getTime(),
-                endTime: midnight.getTime(),
-                duration: prevDayDuration
-            };
-
-            await StorageManager.saveWorkRecord(prevDayRecord);
-            console.log('이전 날짜 세션 저장:', prevDayRecord);
-
-            // 2. 새로운 날짜의 세션 시작 (자정 ~ 현재)
-            const newState = {
-                ...this.state,
-                startTime: midnight.getTime(),
-                currentSession: Math.floor((now - midnight) / 1000),
-                totalToday: Math.floor((now - midnight) / 1000),
-                savedTotalToday: 0
-            };
-
-            await StorageManager.saveWorkStatus(newState);
-            console.log('새 날짜 세션 시작:', newState);
-
-            // 상태 업데이트 알림
-            chrome.runtime.sendMessage({
-                type: Events.STATUS_UPDATED,
-                data: newState
-            }).catch(err => console.log('Popup might be closed'));
-        }
-    } catch (error) {
-        console.error('자정 처리 중 오류 발생:', error);
+        // 이전 날짜 기록 저장
+        const record = {
+            date: dateStr,
+            duration: previousDaySession,
+            startTime: this.state.startTime,
+            endTime: midnight.toISOString()
+        };
+        
+        console.log('자정 리셋 시 저장되는 기록:', record);
+        await StorageManager.saveWorkRecord(record);
+        
+        // 새로운 세션 시작
+        this.state = {
+            isWorking: true,  // 계속 작업 중
+            startTime: midnight.toISOString(),  // 00:00부터 시작
+            currentSession: 0,
+            totalToday: 0,
+            savedTotalToday: 0,
+            autoStopHours: this.state.autoStopHours
+        };
+    } else {
+        // 작업 중이 아닌 경우 완전 리셋
+        this.state = {
+            ...DefaultState,
+            autoStopHours: this.state.autoStopHours
+        };
     }
+
+    // 상태 저장 확인
+    console.log('리셋된 상태:', this.state);
+    await this.saveAndNotify();
+    
+    // 저장 후 상태 다시 확인
+    const saved = await StorageManager.getWorkStatus();
+    console.log('저장 후 상태:', saved);
   }
 
   async sendDailyReport() {
@@ -627,65 +625,53 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// 메시지 리스너 수정
+// 메시지 리스너 설정
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // 비동기 작업을 위한 async 함수
-  (async () => {
+  const handleMessage = async () => {
     try {
       if (!workManager) {
         workManager = new WorkManager();
         await workManager.initialize();
       }
 
-      let response;
       switch (message.type) {
         case Commands.START_WORK:
           await workManager.startWork(message.data);
-          response = { success: true };
-          break;
+          return { success: true };
         case Commands.STOP_WORK:
           await workManager.stopWork();
-          response = { success: true };
-          break;
+          return { success: true };
         case Commands.GET_STATUS:
-          response = workManager.state;
-          break;
+          return workManager.state;
         case Commands.SET_AUTO_STOP:
           await workManager.setAutoStop(message.data);
-          response = { success: true };
-          break;
+          return { success: true };
         case 'SETUP_EMAIL_ALARM':
           await workManager.setupEmailAlarm();
-          response = { success: true };
-          break;
+          return { success: true };
         case 'TEST_EMAIL_REPORT':
           try {
             await chrome.tabs.create({
               url: chrome.runtime.getURL('email/send.html')
             });
-            response = { success: true };
+            console.log('이메일 발송 페이지 열림');
+            return { success: true };
           } catch (error) {
             console.error('이메일 발송 테스트 실패:', error);
-            response = { success: false, error: error.message };
+            return { success: false, error: error.message };
           }
-          break;
         case 'MIDNIGHT_RESET_TEST':
           await workManager.handleMidnightReset();
-          response = { success: true };
-          break;
-        default:
-          response = { success: false, error: 'Unknown command' };
+          return { success: true };
       }
-
-      // 응답 전송
-      sendResponse(response);
     } catch (error) {
       console.error('메시지 처리 실패:', error);
-      sendResponse({ success: false, error: error.message });
+      return { success: false, error: error.message };
     }
-  })();
+  };
 
-  // 비동기 응답을 위해 반드시 true 반환
+  // 비동기 응답 처리
+  handleMessage().then(sendResponse);
   return true;
 });
 
@@ -737,59 +723,31 @@ function getTimeBasedMessage(totalSeconds, hasRecord = true) {
 }
 
 async function checkMidnight() {
-    try {
-        const currentState = await StorageManager.getWorkStatus();
-        if (!currentState?.isWorking) return;
-
+    const currentState = await StorageManager.getWorkStatus();
+    if (currentState.isWorking) {
         const now = new Date();
-        const startTime = new Date(currentState.startTime);
-        
-        // 현재 시간이 자정인지, 그리고 시작 시간이 이전 날짜인지 확인
-        if (now.getHours() === 0 && now.getMinutes() === 0 && 
-            startTime.getDate() !== now.getDate()) {
+        if (now.getHours() === 0 && now.getMinutes() === 0) {
+            const prevWorkEnd = new Date(now);
+            prevWorkEnd.setSeconds(0);
+            prevWorkEnd.setMilliseconds(0);
             
-            console.log('자정 세션 분할 시작:', {
-                현재시간: now.toLocaleString(),
-                시작시간: startTime.toLocaleString()
+            await StorageManager.saveWorkRecord({
+                startTime: currentState.startTime,
+                endTime: prevWorkEnd.getTime(),
+                duration: Math.floor((prevWorkEnd.getTime() - currentState.startTime) / 1000)
             });
 
-            // 자정 시간 계산
-            const midnight = new Date(now);
-            midnight.setHours(0, 0, 0, 0);
-
-            // 1. 이전 날짜의 세션 저장 (시작시간 ~ 자정)
-            const prevDayDuration = Math.floor((midnight - startTime) / 1000);
-            const prevDayRecord = {
-                startTime: startTime.getTime(),
-                endTime: midnight.getTime(),
-                duration: prevDayDuration
-            };
-
-            await StorageManager.saveWorkRecord(prevDayRecord);
-            console.log('이전 날짜 세션 저장:', prevDayRecord);
-
-            // 2. 새로운 날짜의 세션 시작 (자정 ~ 현재)
-            const newState = {
+            const newStartTime = new Date(now);
+            newStartTime.setSeconds(0);
+            newStartTime.setMilliseconds(0);
+            
+            await StorageManager.saveWorkStatus({
                 ...currentState,
-                startTime: midnight.getTime(),
-                currentSession: Math.floor((now - midnight) / 1000),
-                totalToday: Math.floor((now - midnight) / 1000),
-                savedTotalToday: 0
-            };
-
-            await StorageManager.saveWorkStatus(newState);
-            console.log('새 날짜 세션 시작:', newState);
-
-            // 상태 업데이트 알림
-            chrome.runtime.sendMessage({
-                type: Events.STATUS_UPDATED,
-                data: newState
-            }).catch(err => console.log('Popup might be closed'));
+                startTime: newStartTime.getTime()
+            });
         }
-    } catch (error) {
-        console.error('자정 처리 중 오류 발생:', error);
     }
 }
 
 // 자정 체크를 위한 인터벌 추가
-setInterval(checkMidnight, 1000 * 30); // 30초마다 체크 
+setInterval(checkMidnight, 1000 * 60); // 1분마다 체크 
