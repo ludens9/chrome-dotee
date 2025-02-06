@@ -196,7 +196,6 @@ class StorageManager {
   static async getWorkStatus() {
     try {
       const { workStatus } = await chrome.storage.local.get('workStatus');
-      const now = new Date();
       
       // 기본 상태
       const defaultState = {
@@ -210,38 +209,30 @@ class StorageManager {
 
       // 저장된 상태가 없으면 기본값 반환
       if (!workStatus) {
-        console.log('저장된 상태 없음, 기본값 사용');
         return defaultState;
       }
 
-      // 저장된 시작 시간이 오늘 날짜가 아니면 초기화
-      if (workStatus.startTime) {
-        const savedDate = new Date(workStatus.startTime).toDateString();
-        const today = now.toDateString();
-        
-        if (savedDate !== today) {
-          console.log('날짜 변경 감지, 상태 초기화', {
-            저장된날짜: savedDate,
-            현재날짜: today
-          });
-          return {
-            ...defaultState,
-            autoStopHours: workStatus.autoStopHours || 2
-          };
-        }
+      // 저장된 상태가 있으면 날짜 확인
+      const now = new Date();
+      const today = now.toDateString();
+      const savedDate = workStatus.startTime ? new Date(workStatus.startTime).toDateString() : null;
+
+      // 날짜가 다르거나 유효하지 않은 시작 시간이면 초기화된 상태 반환
+      if (!savedDate || savedDate !== today || workStatus.startTime < 0) {
+        return {
+          ...defaultState,
+          autoStopHours: workStatus.autoStopHours || 2
+        };
       }
 
       // 유효한 상태 반환
       return {
-        ...defaultState,
-        ...workStatus,
-        // 시작 시간이 현재보다 미래면 현재 시간으로 보정
-        startTime: workStatus.startTime > now.getTime() ? now.getTime() : workStatus.startTime
+        isWorking: false,
+        startTime: null,
+        currentSession: 0,
+        totalToday: 0,
+        autoStopHours: 2  // 기본값을 2시간으로 설정
       };
-
-    } catch (error) {
-      console.error('작업 상태 조회 실패:', error);
-      return defaultState;
     }
   }
 

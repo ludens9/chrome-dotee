@@ -112,21 +112,30 @@ class WorkManager {
       const today = now.toDateString();
       const saved = await StorageManager.getWorkStatus();
       
-      // 상태 초기화 - 오늘 날짜 기준으로 검증
-      if (!saved.startTime || new Date(saved.startTime).toDateString() !== today) {
-        // 날짜가 다르거나 시작 시간이 없으면 초기화
-        this.state = {
-          ...DefaultState,
-          autoStopHours: saved.autoStopHours || 2
-        };
-      } else {
-        this.state = saved;
-      }
+      // 상태 초기화
+      this.state = saved;
       
       // 작업 중이면 타이머 시작
-      if (this.state.isWorking) {
-        this.startTimer();
-        this.iconAnimator.startAnimation();
+      if (this.state.isWorking && this.state.startTime) {
+        // 시작 시간 유효성 검사
+        const now = new Date();
+        const startTime = new Date(this.state.startTime);
+        
+        if (startTime > now || startTime.toDateString() !== now.toDateString()) {
+          // 유효하지 않은 시작 시간이면 작업 중지
+          this.state = {
+            ...this.state,
+            isWorking: false,
+            startTime: null,
+            currentSession: 0,
+            totalToday: 0,
+            savedTotalToday: 0
+          };
+          await this.saveAndNotify();
+        } else {
+          this.startTimer();
+          this.iconAnimator.startAnimation();
+        }
       } else {
         this.iconAnimator.resetToDefault();
       }
@@ -134,7 +143,7 @@ class WorkManager {
       await this.saveAndNotify();
       
       console.log('WorkManager 초기화 완료:', {
-        현재시간: now.toLocaleString(),
+        현재시간: new Date().toLocaleString(),
         상태: this.state
       });
     } catch (error) {
@@ -163,26 +172,26 @@ class WorkManager {
     if (this.timer) return;
     
     this.timer = setInterval(async () => {
-        if (!this.state.startTime) return;
-        
-        const now = new Date();
-        const startTime = new Date(this.state.startTime);
-        
-        // 현재 세션 시간 계산 (초 단위)
-        const sessionSeconds = Math.floor((now - startTime) / 1000);
-        this.state.currentSession = sessionSeconds;
-        
-        // 총 누적시간 계산 (초 단위)
-        const totalSeconds = (this.state.savedTotalToday || 0) + sessionSeconds;
-        this.state.totalToday = totalSeconds;
-        
-        // 날짜가 변경됐는지 확인
-        if (startTime.toDateString() !== now.toDateString()) {
-            await this.midnightManager.handleMidnightTransition();
-            return;
-        }
-        
-        await this.saveAndNotify();
+      if (!this.state.startTime) return;
+      
+      const now = new Date();
+      // 현재 세션 시간 계산 (초 단위)
+      const sessionSeconds = Math.floor((now - new Date(this.state.startTime)) / 1000);
+      this.state.currentSession = sessionSeconds;
+      
+      // 총 누적시간 계산 (초 단위)
+      const savedSeconds = this.state.savedTotalToday || 0;
+      const totalSeconds = savedSeconds + sessionSeconds;
+      this.state.totalToday = totalSeconds;
+      
+      // 디버깅을 위한 로그
+      console.log('Timer Update:', {
+        currentSession: this.formatTime(sessionSeconds),
+        savedTotal: this.formatTime(savedSeconds),
+        totalToday: this.formatTime(totalSeconds)
+      });
+      
+      await this.saveAndNotify();
     }, 1000);
   }
 
@@ -203,32 +212,20 @@ class WorkManager {
 
   async startWork(data = {}) {
     try {
-        const now = new Date();
-        
-        // 새로운 세션 시작 시 totalToday 초기화 여부 확인
-        let savedTotalToday = 0;
-        
-        // 같은 날짜의 이전 세션이 있는 경우에만 savedTotalToday 유지
-        if (this.state.startTime) {
-            const prevStartDate = new Date(this.state.startTime).toDateString();
-            if (prevStartDate === now.toDateString()) {
-                savedTotalToday = this.state.totalToday || 0;
-            }
-        }
+        const now = new Date();  // 로컬 시간
         
         this.state = {
             ...this.state,
             isWorking: true,
-            startTime: now.getTime(),
+            startTime: now.getTime(),  // timestamp로 저장
             currentSession: 0,
             savedTotalToday: savedTotalToday,
-            totalToday: savedTotalToday,
+            totalToday: savedTotalToday,  // 초기 totalToday는 savedTotalToday와 동일
             autoStopHours: data.autoStopHours !== null ? data.autoStopHours : (this.state.autoStopHours || 0)
         };
         
         console.log('근무 시작:', {
             시작시간: now.toLocaleString(),
-            누적시간: savedTotalToday,
             상태: this.state
         });
         
