@@ -108,43 +108,33 @@ class WorkManager {
 
   async initialize() {
     try {
+      const now = new Date();
+      const today = now.toDateString();
       const saved = await StorageManager.getWorkStatus();
       
-      // 상태 초기화
-      this.state = saved;
+      // 상태 초기화 - 오늘 날짜 기준으로 검증
+      if (!saved.startTime || new Date(saved.startTime).toDateString() !== today) {
+        // 날짜가 다르거나 시작 시간이 없으면 초기화
+        this.state = {
+          ...DefaultState,
+          autoStopHours: saved.autoStopHours || 2
+        };
+      } else {
+        this.state = saved;
+      }
       
       // 작업 중이면 타이머 시작
-      if (this.state.isWorking && this.state.startTime) {
-        // 시작 시간 유효성 검사
-        const now = new Date();
-        const startTime = new Date(this.state.startTime);
-        
-        if (startTime > now || startTime.toDateString() !== now.toDateString()) {
-          // 유효하지 않은 시작 시간이면 작업 중지
-          this.state = {
-            ...this.state,
-            isWorking: false,
-            startTime: null,
-            currentSession: 0,
-            totalToday: 0,
-            savedTotalToday: 0
-          };
-          await this.saveAndNotify();
-        } else {
-          this.startTimer();
-          this.iconAnimator.startAnimation();
-        }
+      if (this.state.isWorking) {
+        this.startTimer();
+        this.iconAnimator.startAnimation();
       } else {
         this.iconAnimator.resetToDefault();
       }
       
-      // 자정 리셋 설정
-      await this.setupMidnightReset();
-      // 이메일 알람 설정
-      await this.setupEmailAlarm();
+      await this.saveAndNotify();
       
       console.log('WorkManager 초기화 완료:', {
-        현재시간: new Date().toLocaleString(),
+        현재시간: now.toLocaleString(),
         상태: this.state
       });
     } catch (error) {
@@ -232,7 +222,7 @@ class WorkManager {
             startTime: now.getTime(),
             currentSession: 0,
             savedTotalToday: savedTotalToday,
-            totalToday: savedTotalToday,  // 초기 totalToday는 savedTotalToday와 동일
+            totalToday: savedTotalToday,
             autoStopHours: data.autoStopHours !== null ? data.autoStopHours : (this.state.autoStopHours || 0)
         };
         
@@ -295,16 +285,12 @@ class WorkManager {
   async saveAndNotify() {
     await StorageManager.saveWorkStatus(this.state);
     try {
-        chrome.runtime.sendMessage({
+        await chrome.runtime.sendMessage({
             type: Events.STATUS_UPDATED,
             data: this.state
-        }).catch(() => {
-            // 무시해도 되는 오류
-            console.log('Popup might be closed, ignoring message send');
         });
     } catch (error) {
-        // 무시해도 되는 오류
-        console.log('Notification skipped - popup might be closed');
+        console.log('팝업이 닫혀있어 알림을 보내지 못했습니다');
     }
   }
 
