@@ -6,10 +6,10 @@ class MidnightManager {
   }
 
   startHourlyCheck() {
-    // 매시간 자정 체크
+    // 매분 자정 체크 (더 정확한 처리를 위해 시간 간격 축소)
     this.hourlyTimer = setInterval(() => {
       this.checkMidnight();
-    }, 60 * 60 * 1000); // 1시간마다
+    }, 60 * 1000); // 1분마다
   }
 
   async checkMidnight() {
@@ -17,7 +17,12 @@ class MidnightManager {
     if (!state.isWorking) return;
 
     const now = new Date();
-    if (now.getHours() === 0 && now.getMinutes() === 0) {
+    const startTime = new Date(state.startTime);
+    
+    // 현재 시간과 시작 시간이 다른 날짜인지 확인
+    if (now.getDate() !== startTime.getDate() || 
+        now.getMonth() !== startTime.getMonth() || 
+        now.getFullYear() !== startTime.getFullYear()) {
       await this.handleMidnightTransition();
     }
   }
@@ -27,37 +32,46 @@ class MidnightManager {
       const state = this.workManager.state;
       if (!state.isWorking) return;
 
-      const now = new Date();
-      const midnight = new Date(now);
+      // 1. 이전 날짜의 자정 시간 계산
+      const startTime = new Date(state.startTime);
+      const midnight = new Date(startTime);
+      midnight.setDate(midnight.getDate() + 1);
       midnight.setHours(0, 0, 0, 0);
       
-      // 1. 이전 날짜의 세션 저장
-      const session = {
+      // 2. 이전 날짜의 세션 저장
+      const previousSession = {
         startTime: state.startTime,
-        endTime: midnight.getTime(),
-        duration: Math.floor((midnight.getTime() - state.startTime) / 1000)
+        endTime: midnight.toISOString(),
+        duration: Math.floor((midnight.getTime() - new Date(state.startTime).getTime()) / 1000)
       };
 
-      await StorageManager.saveWorkRecord(session);
+      console.log('자정 이전 세션 저장:', {
+        시작: new Date(previousSession.startTime).toLocaleString(),
+        종료: new Date(previousSession.endTime).toLocaleString(),
+        시간: Math.floor(previousSession.duration / 3600)
+      });
 
-      // 2. 새로운 날짜로 즉시 시작
+      await StorageManager.saveWorkRecord(previousSession);
+
+      // 3. 새로운 날짜로 세션 시작
       const newSession = {
         isWorking: true,
-        startTime: midnight.getTime(),
-        currentSession: 0,
-        totalToday: 0,
+        startTime: midnight.toISOString(),
+        currentSession: Math.floor((new Date().getTime() - midnight.getTime()) / 1000),
+        totalToday: Math.floor((new Date().getTime() - midnight.getTime()) / 1000),
         savedTotalToday: 0,
         autoStopHours: state.autoStopHours
       };
 
-      // 상태 업데이트
+      console.log('자정 이후 새 세션 시작:', {
+        시작: new Date(newSession.startTime).toLocaleString(),
+        현재세션: Math.floor(newSession.currentSession / 3600),
+        총누적: Math.floor(newSession.totalToday / 3600)
+      });
+
+      // 4. 상태 업데이트
       this.workManager.state = newSession;
       await StorageManager.saveWorkStatus(newSession);
-
-      console.log('자정 전환 완료:', {
-        이전세션: session,
-        새세션: newSession
-      });
 
     } catch (error) {
       console.error('자정 전환 실패:', error);
@@ -84,7 +98,5 @@ class MidnightManager {
   }
 }
 
-// 전역 스코프에서 사용 가능하도록 설정
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MidnightManager };
-} 
+// 전역 객체에 할당
+self.MidnightManager = MidnightManager; 

@@ -1,6 +1,108 @@
 // import 문 제거
 // getTimeBasedMessage 함수는 messageUtil.js에서 전역으로 사용 가능
 
+// 상수 정의
+const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+
+// EmailService 객체 정의
+const EmailService = {
+  API_URL: 'https://api.emailjs.com/api/v1.0/email/send',
+  PUBLIC_KEY: '5wn-prO2m11ltZdF7',
+  SERVICE_ID: 'service_ukqvpjc',
+  TEMPLATE_ID: 'template_ci84ax5',
+
+  async sendEmail(templateParams) {
+    try {
+      if (!templateParams.to_email) {
+        throw new Error('수신자 이메일 주소가 필요합니다');
+      }
+
+      const params = {
+        to_name: templateParams.to_email.split('@')[0],
+        to_email: templateParams.to_email,
+        from_name: "Dotee",
+        date: templateParams.date || '',
+        weekday: templateParams.weekday || '',
+        start_time: templateParams.start_time || '기록 없음',
+        end_time: templateParams.end_time || '기록 없음',
+        total_hours: templateParams.total_hours || '0.0',
+        total_sessions: templateParams.total_sessions || '0',
+        week_hours: templateParams.week_hours || '0.0',
+        month_hours: templateParams.month_hours || '0.0',
+        message: templateParams.message || ''
+      };
+
+      const payload = {
+        service_id: this.SERVICE_ID,
+        template_id: this.TEMPLATE_ID,
+        user_id: this.PUBLIC_KEY,
+        template_params: params
+      };
+
+      const response = await fetch(this.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`이메일 발송 실패 (${response.status})`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('이메일 발송 실패:', error);
+      throw error;
+    }
+  },
+
+  async sendDailyReport() {
+    try {
+      const settings = await StorageManager.getSettings();
+      if (!settings.email) {
+        throw new Error('이메일 설정이 없습니다');
+      }
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const records = await StorageManager.getWorkRecords(yesterday);
+      const totalSeconds = records ? records.reduce((sum, record) => sum + record.duration, 0) : 0;
+      const weekTotal = await StorageManager.getWeeklyTotal(yesterday);
+      const monthTotal = await StorageManager.getMonthlyTotal(yesterday);
+
+      const emailData = {
+        to_email: settings.email,
+        date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
+        weekday: weekdays[yesterday.getDay()],
+        start_time: records?.length ? new Date(records[0].startTime).toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : '기록 없음',
+        end_time: records?.length ? new Date(records[records.length - 1].endTime).toLocaleTimeString('ko-KR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : '기록 없음',
+        total_hours: (totalSeconds / 3600).toFixed(1),
+        total_sessions: records?.length || 0,
+        week_hours: (weekTotal / 3600).toFixed(1),
+        month_hours: (monthTotal / 3600).toFixed(1),
+        message: getTimeBasedMessage(totalSeconds, !!records?.length)
+      };
+
+      await this.sendEmail(emailData);
+      console.log('일일 리포트 발송 완료');
+      return true;
+    } catch (error) {
+      console.error('일일 리포트 발송 실패:', error);
+      throw error;
+    }
+  }
+};
+
+// 전역 객체에 할당
+self.EmailService = EmailService;
+
 function getTimeBasedMessage(totalSeconds, hasRecord = true) {
     if (!hasRecord) {
         return `Had a good rest yesterday? Let's start fresh today! 😊
@@ -202,74 +304,6 @@ async function calculateStats(baseDate) {
         throw error;
     }
 }
-
-// 이메일 발송 함수
-async function sendDailyReport() {
-    try {
-        const settings = await chrome.storage.local.get(['email']);
-        if (!settings.email) {
-            throw new Error('이메일 설정이 없습니다.');
-        }
-
-        // 어제 날짜 계산 (로컬 시간 기준)
-        const now = new Date();
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toLocaleDateString();
-
-        // 어제의 근무 기록 가져오기
-        const records = await StorageManager.getWorkRecords(yesterdayStr);
-
-        // 시작 시간과 종료 시간 계산
-        let times = {
-            startTime: '기록 없음',
-            endTime: '기록 없음'
-        };
-
-        if (records && records.length > 0) {
-            times.startTime = new Date(records[0].startTime).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            times.endTime = new Date(records[records.length - 1].endTime).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        }
-
-        // 총 근무시간 계산 (초 단위)
-        const totalSeconds = records.reduce((total, record) => {
-            return total + record.duration;
-        }, 0);
-
-        const emailData = {
-            to_email: settings.email,
-            date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
-            weekday: weekdays[yesterday.getDay()],
-            start_time: times.startTime,
-            end_time: times.endTime,
-            total_hours: (totalSeconds / 3600).toFixed(1),
-            total_sessions: records.length,
-            message: records.length === 0 
-                ? getTimeBasedMessage(0, false)
-                : getTimeBasedMessage(totalSeconds, true),
-            week_status: weekdays[yesterday.getDay()],
-            week_hours: (await calculateWeeklyTotal(yesterday) / 3600).toFixed(1),
-            last_week_hours: (await calculateWeeklyTotal(new Date(yesterday.getTime() - 7 * 24 * 60 * 60 * 1000)) / 3600).toFixed(1),
-            month_hours: (await calculateMonthlyTotal(yesterday) / 3600).toFixed(1),
-            last_month_hours: (await calculateMonthlyTotal(new Date(yesterday.getFullYear(), yesterday.getMonth() - 1, yesterday.getDate())) / 3600).toFixed(1)
-        };
-
-        await emailService.sendEmail(emailData);
-        return true;
-    } catch (error) {
-        console.error('일일 리포트 발송 실패:', error);
-        throw error;
-    }
-}
-
-// 전역으로 내보내기
-window.sendDailyReport = sendDailyReport;
 
 async function sendWorkReport() {
     const state = await StorageManager.getWorkStatus();

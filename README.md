@@ -85,6 +85,24 @@ timeStr = new Date().toLocaleTimeString('ko-KR', {
 })
 ```
 
+### 콘솔 디버깅
+```javascript
+// 근무 기록 데이터 확인
+chrome.storage.local.get(null, console.log)  // 전체 데이터 확인
+
+// 특정 날짜의 근무 기록 확인
+chrome.storage.local.get(['2024-02-04'], console.log)
+
+// 주간 데이터 확인
+chrome.storage.local.get(['weekly:2024-W05'], console.log)
+
+// 월간 데이터 확인
+chrome.storage.local.get(['monthly:2024-02'], console.log)
+
+// 활성 세션 확인
+chrome.storage.local.get(['activeSession'], console.log)
+```
+
 ### 테스트 포인트
 1. 자정 전환
    - 세션 분할 정확성
@@ -117,3 +135,21 @@ timeStr = new Date().toLocaleTimeString('ko-KR', {
 2. 데이터 저장 구조 개선
    - 일관된 키 형식 사용으로 데이터 정합성 향상
    - 불필요한 키 변환 과정 제거
+
+## 근무 기록 관리 규칙
+
+### 세션 관리
+- 모든 시간은 timestamp 형식으로 저장
+- 세션은 시작 시간 기준으로 날짜가 결정됨
+- 자정을 넘기는 세션은 자동으로 분리됨
+- 각 세션은 해당 날짜의 기록으로만 저장
+
+### 데이터 무결성
+- 종료 시간은 시작 시간보다 앞설 수 없음
+- 중복 세션 저장 방지
+- 모든 시간 관련 연산은 검증 포함
+
+### 자정 처리
+1. 현재 세션을 23:59:59.999에 종료
+2. 새로운 세션을 00:00:00.000에 시작
+3. 각각 해당 날짜에 기록

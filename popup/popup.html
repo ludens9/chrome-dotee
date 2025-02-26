@@ -3,8 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
-  <script src="../js/storage.js"></script>
-  <script src="popup.js"></script>
 </head>
 <body>
   <div id="main-page" class="page active">
@@ -103,5 +101,12 @@
       </ul>
     </div>
   </div>
+
+  <!-- 에러 메시지를 표시할 컨테이너 -->
+  <div id="error-container" style="color: red; padding: 10px; display: none;"></div>
+  
+  <!-- 스크립트 로드 순서 변경 -->
+  <script src="../js/storage.js"></script>  <!-- 먼저 로드 -->
+  <script src="popup.js"></script>         <!-- 나중에 로드 -->
 </body>
 </html> 

@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await new Promise(resolve => setTimeout(resolve, 500));
     
     statusEl.textContent = '이메일 발송 중...';
-    await sendDailyReport();
+    await EmailService.sendDailyReport();
     
     statusEl.textContent = '이메일 발송 완료!';
     setTimeout(() => window.close(), 1000);
