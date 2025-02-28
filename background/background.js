@@ -125,17 +125,8 @@ class WorkManager {
 
   async updateBadge(seconds) {
     try {
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const text = `${hours}:${String(minutes).padStart(2, '0')}`;
-      
-      // 배지 배경색 설정 (반투명 회색)
-      await chrome.action.setBadgeBackgroundColor({ 
-        color: [102, 102, 102, 180]  // RGBA 형식, 마지막 값은 투명도 (0-255)
-      });
-      
-      // 배지 텍스트 설정
-      await chrome.action.setBadgeText({ text });
+      // 배지 텍스트를 빈 문자열로 설정하여 숨김
+      await chrome.action.setBadgeText({ text: '' });
     } catch (error) {
       console.error('배지 업데이트 실패:', error);
     }
@@ -537,6 +528,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 async function checkMidnight() {
     const currentState = await StorageManager.getWorkStatus();
+    // currentState가 null이거나 undefined인 경우 early return
+    if (!currentState) return;
+    
+    // isWorking이 true일 때만 실행
     if (currentState.isWorking) {
         const now = new Date();
         if (now.getHours() === 0 && now.getMinutes() === 0) {

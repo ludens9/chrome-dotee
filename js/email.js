@@ -25,7 +25,11 @@ const EmailService = {
         total_hours: templateParams.total_hours || '0.0',
         total_sessions: templateParams.total_sessions || '0',
         week_hours: templateParams.week_hours || '0.0',
+        last_week_hours: templateParams.last_week_hours || '0.0',
+        month: templateParams.month || '',
         month_hours: templateParams.month_hours || '0.0',
+        last_month: templateParams.last_month || '',
+        last_month_hours: templateParams.last_month_hours || '0.0',
         message: templateParams.message || ''
       };
 
@@ -73,6 +77,10 @@ const EmailService = {
       const thisMonthTotal = await StorageManager.getMonthlyTotal(yesterday);
       const lastMonthTotal = await StorageManager.getLastMonthTotal(yesterday);
 
+      // 이번달과 저번달 계산
+      const thisMonth = yesterday.getMonth() + 1;
+      const lastMonth = thisMonth === 1 ? 12 : thisMonth - 1;
+
       const emailData = {
         to_email: settings.email,
         date: `${yesterday.getMonth() + 1}월 ${yesterday.getDate()}일`,
@@ -91,9 +99,9 @@ const EmailService = {
         total_sessions: yesterdayRecords.length,
         week_hours: (weekTotal / 3600).toFixed(1),
         last_week_hours: (lastWeekTotal / 3600).toFixed(1),
-        month: yesterday.getMonth() + 1,
+        month: thisMonth,
         month_hours: (thisMonthTotal / 3600).toFixed(1),
-        last_month: ((yesterday.getMonth() + 11) % 12) + 1,
+        last_month: lastMonth,
         last_month_hours: (lastMonthTotal / 3600).toFixed(1),
         message: getTimeBasedMessage(yesterdayTotal, yesterdayRecords.length > 0)
       };

@@ -235,9 +235,21 @@ class PopupManager {
   }
 
   formatTime(seconds) {
+    // 24시간 이상의 시간도 올바르게 표시
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
+    
+    // 시간이 24를 넘어가면 경고 로그
+    if (h >= 24) {
+      console.warn('비정상적으로 긴 세션 감지:', {
+        총시간: seconds,
+        시: h,
+        분: m,
+        초: s
+      });
+    }
+    
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 

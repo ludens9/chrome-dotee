@@ -186,15 +186,32 @@ class StorageManager {
   }
 
   static async getDailyStats(date) {
-    const dateStr = new Date(date).toISOString().split('T')[0];
-    const records = await this.getWorkRecords(dateStr);
-    
-    return {
-      totalDuration: records.reduce((sum, r) => sum + r.duration, 0),
-      sessionCount: records.length,
-      firstStart: records[0]?.startTime,
-      lastEnd: records[records.length - 1]?.endTime
-    };
+    try {
+      const dateStr = new Date(date).toISOString().split('T')[0];
+      const records = await this.getWorkRecords(dateStr);
+      
+      // 완료된 세션들의 시간만 합산
+      const completedTotal = records.reduce((sum, r) => sum + (r.duration || 0), 0);
+      
+      // 현재 진행중인 세션이 있다면 해당 날짜의 것만 계산
+      const currentSession = await this.getCurrentSession();
+      let currentSessionTime = 0;
+      
+      if (currentSession) {
+        const sessionDate = new Date(currentSession.startTime).toISOString().split('T')[0];
+        if (sessionDate === dateStr) {
+          currentSessionTime = Math.floor((Date.now() - currentSession.startTime) / 1000);
+        }
+      }
+
+      return {
+        totalDuration: completedTotal + currentSessionTime,
+        sessionCount: records.length + (currentSessionTime > 0 ? 1 : 0)
+      };
+    } catch (error) {
+      console.error('일간 통계 계산 실패:', error);
+      return { totalDuration: 0, sessionCount: 0 };
+    }
   }
 
   static async saveSettings(settings) {
